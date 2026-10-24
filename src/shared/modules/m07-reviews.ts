@@ -1,0 +1,80 @@
+import type { ModuleDef } from '../registry.ts';
+import { color, pagesField, targetsFrom } from './common.ts';
+
+export const reviews: ModuleDef = {
+  id: 'reviews',
+  code: 'M07',
+  name: 'Avaliações com fotos',
+  summary: 'Mostra melhor as avaliações e fotos que a loja já recebeu na INK, com nome, data e nota de cada uma. Não cria nota geral.',
+  pages: ['home', 'product'],
+  integrations: ['ink.reviews'],
+  fields: [
+    { key: 'title', type: 'text', label: 'Título', max: 60, required: true },
+    {
+      key: 'selection',
+      type: 'select',
+      label: 'Quais avaliações',
+      options: [
+        { value: 'com-foto', label: 'As que têm foto, mais bem avaliadas primeiro' },
+        { value: 'recentes', label: 'As mais recentes' },
+        { value: 'destaques', label: 'Só as que eu escolher (seleção editorial)' },
+      ],
+    },
+    {
+      key: 'highlights',
+      type: 'list',
+      label: 'Avaliações escolhidas',
+      help: 'Escolha na lista de avaliações publicadas da loja.',
+      itemLabel: 'Avaliação',
+      titleKey: 'ref',
+      min: 1,
+      max: 20,
+      showWhen: { key: 'selection', in: ['destaques'] },
+      fields: [{ key: 'ref', type: 'text', label: 'Avaliação', max: 80, required: true }],
+    },
+    { key: 'max', type: 'number', label: 'Quantas mostrar', min: 3, max: 20, integer: true },
+    {
+      key: 'layout',
+      type: 'select',
+      label: 'Formato',
+      options: [
+        { value: 'carrossel', label: 'Carrossel' },
+        { value: 'grade', label: 'Grade' },
+      ],
+    },
+    { key: 'showRating', type: 'toggle', label: 'Mostrar a nota de cada avaliação' },
+    {
+      key: 'position',
+      type: 'select',
+      label: 'Posição',
+      options: [
+        { value: 'antes-rodape', label: 'Antes do rodapé' },
+        { value: 'apos-banner', label: 'Depois do banner (início)' },
+      ],
+    },
+    pagesField(['home', 'product']),
+    { key: 'accent', type: 'colorToken', label: 'Cor das estrelas e botões' },
+  ],
+  defaults: {
+    title: 'Quem comprou, aprovou',
+    selection: 'com-foto',
+    highlights: [],
+    max: 8,
+    layout: 'carrossel',
+    showRating: true,
+    position: 'antes-rodape',
+    pages: ['home'],
+    accent: 'accent',
+  },
+  targets: (s) => targetsFrom(s, ['home']),
+  project: (s, ctx) => ({
+    title: s.title,
+    selection: s.selection,
+    highlights: s.selection === 'destaques' ? (s.highlights as { ref: string }[]).map((h) => h.ref) : [],
+    max: s.max,
+    layout: s.layout,
+    showRating: s.showRating,
+    position: s.position,
+    colors: color(ctx, s.accent),
+  }),
+};

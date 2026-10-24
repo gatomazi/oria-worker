@@ -1,0 +1,139 @@
+<turbo-stream action="update" target="image_review"><template>
+    <div class="review-image-modal-content md:rounded relative md:flex md:flex-row md:justify-center md:px-32 md:w-[754px] md:max-h-[754px] md:bg-black"> 
+    <div class="md:hidden flex flex-col items-end gap-4 top-12 right-1/2 md:w-fit absolute">
+      <span class="text-gray-100 font-semibold leading-5"> 1/1 </span> 
+    </div>
+    <img data-action="click->ink-store--reviews#toggleReviewInfo" src="https://gcp-images.majestic.ink.rsvcloud.com/images/product_v2/main_image/5d17d78dc8049019ab831574ea05b06e.webp" alt="Foto enviada na avaliação" decoding="async" class="h-screen md:max-h-auto md:h-[350px] xl:h-[400px] 2xl:max-h-[754px] 2xl:h-[754px] overflow-hidden object-cover">
+    <form class="review-info absolute top-1/2 left-2 z-10" data-turbo="true" data-turbo-stream="true" action="/useorigens/store_review_images/9554" accept-charset="UTF-8" method="get">
+      <button>
+        <span class="w-4 h-4 [&amp;&gt;svg]:h-5 [&amp;&gt;svg]:w-5 flex justify-center items-center text-gray-200 cursor-pointer"><svg width="7" height="10" viewBox="0 0 7 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M6.20703 0.292787C6.3945 0.480314 6.49982 0.734622 6.49982 0.999786C6.49982 1.26495 6.3945 1.51926 6.20703 1.70679L2.91403 4.99979L6.20703 8.29279C6.38919 8.48139 6.48998 8.73399 6.4877 8.99619C6.48543 9.25838 6.38026 9.5092 6.19485 9.6946C6.00944 9.88001 5.75863 9.98518 5.49643 9.98746C5.23423 9.98974 4.98163 9.88894 4.79303 9.70679L0.793031 5.70679C0.60556 5.51926 0.500244 5.26495 0.500244 4.99979C0.500244 4.73462 0.60556 4.48031 0.793031 4.29279L4.79303 0.292787C4.98056 0.105316 5.23487 0 5.50003 0C5.76519 0 6.0195 0.105316 6.20703 0.292787V0.292787Z" fill="currentColor"/>
+</svg>
+</span>
+      </button>
+</form>    <form class="review-info absolute top-1/2 right-2 z-10" data-turbo="true" data-turbo-stream="true" action="/useorigens/store_review_images/5776" accept-charset="UTF-8" method="get">
+      <button>
+      <span class="w-4 h-4 [&amp;&gt;svg]:h-5 [&amp;&gt;svg]:w-5 flex justify-center items-center text-gray-200 cursor-pointer"><svg width="7" height="10" viewBox="0 0 7 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M0.793031 9.70692C0.60556 9.51939 0.500244 9.26508 0.500244 8.99992C0.500244 8.73475 0.60556 8.48045 0.793031 8.29292L4.08603 4.99992L0.793031 1.70692C0.610873 1.51832 0.510078 1.26571 0.512356 1.00352C0.514635 0.741321 0.619804 0.490509 0.805212 0.305101C0.99062 0.119692 1.24143 0.0145233 1.50363 0.0122448C1.76583 0.00996641 2.01843 0.110761 2.20703 0.292919L6.20703 4.29292C6.3945 4.48045 6.49982 4.73475 6.49982 4.99992C6.49982 5.26508 6.3945 5.51939 6.20703 5.70692L2.20703 9.70692C2.0195 9.89439 1.76519 9.99971 1.50003 9.99971C1.23487 9.99971 0.980558 9.89439 0.793031 9.70692Z" fill="currentColor"/>
+</svg>
+</span>
+      </button>
+</form>  </div>
+</template></turbo-stream>
+<turbo-stream action="update" target="review_description"><template>
+  <div class="review-info review-image-modal-content flex flex-col gap-6 p-4 md:p-0 mb-20 absolute md:relative bottom-0">
+    <div class="flex flex-col gap-2">
+      <div class="flex flex-col gap-2 w-full md:max-w-72">
+        <div class="flex flex-row gap-1 justify-between">
+          <div class="flex flex-row gap-1">
+                <span class="text-yellow-300 [&amp;&gt;svg]:w-4 [&amp;&gt;svg]:h-4"><svg class="w-2 h-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 22 20">
+  <path d="M20.924 7.625a1.523 1.523 0 0 0-1.238-1.044l-5.051-.734-2.259-4.577a1.534 1.534 0 0 0-2.752 0L7.365 5.847l-5.051.734A1.535 1.535 0 0 0 1.463 9.2l3.656 3.563-.863 5.031a1.532 1.532 0 0 0 2.226 1.616L11 17.033l4.518 2.375a1.534 1.534 0 0 0 2.226-1.617l-.863-5.03L20.537 9.2a1.523 1.523 0 0 0 .387-1.575Z"/>
+</svg></span>
+                <span class="text-yellow-300 [&amp;&gt;svg]:w-4 [&amp;&gt;svg]:h-4"><svg class="w-2 h-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 22 20">
+  <path d="M20.924 7.625a1.523 1.523 0 0 0-1.238-1.044l-5.051-.734-2.259-4.577a1.534 1.534 0 0 0-2.752 0L7.365 5.847l-5.051.734A1.535 1.535 0 0 0 1.463 9.2l3.656 3.563-.863 5.031a1.532 1.532 0 0 0 2.226 1.616L11 17.033l4.518 2.375a1.534 1.534 0 0 0 2.226-1.617l-.863-5.03L20.537 9.2a1.523 1.523 0 0 0 .387-1.575Z"/>
+</svg></span>
+                <span class="text-yellow-300 [&amp;&gt;svg]:w-4 [&amp;&gt;svg]:h-4"><svg class="w-2 h-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 22 20">
+  <path d="M20.924 7.625a1.523 1.523 0 0 0-1.238-1.044l-5.051-.734-2.259-4.577a1.534 1.534 0 0 0-2.752 0L7.365 5.847l-5.051.734A1.535 1.535 0 0 0 1.463 9.2l3.656 3.563-.863 5.031a1.532 1.532 0 0 0 2.226 1.616L11 17.033l4.518 2.375a1.534 1.534 0 0 0 2.226-1.617l-.863-5.03L20.537 9.2a1.523 1.523 0 0 0 .387-1.575Z"/>
+</svg></span>
+                <span class="text-yellow-300 [&amp;&gt;svg]:w-4 [&amp;&gt;svg]:h-4"><svg class="w-2 h-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 22 20">
+  <path d="M20.924 7.625a1.523 1.523 0 0 0-1.238-1.044l-5.051-.734-2.259-4.577a1.534 1.534 0 0 0-2.752 0L7.365 5.847l-5.051.734A1.535 1.535 0 0 0 1.463 9.2l3.656 3.563-.863 5.031a1.532 1.532 0 0 0 2.226 1.616L11 17.033l4.518 2.375a1.534 1.534 0 0 0 2.226-1.617l-.863-5.03L20.537 9.2a1.523 1.523 0 0 0 .387-1.575Z"/>
+</svg></span>
+                <span class="text-yellow-300 [&amp;&gt;svg]:w-4 [&amp;&gt;svg]:h-4"><svg class="w-2 h-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 22 20">
+  <path d="M20.924 7.625a1.523 1.523 0 0 0-1.238-1.044l-5.051-.734-2.259-4.577a1.534 1.534 0 0 0-2.752 0L7.365 5.847l-5.051.734A1.535 1.535 0 0 0 1.463 9.2l3.656 3.563-.863 5.031a1.532 1.532 0 0 0 2.226 1.616L11 17.033l4.518 2.375a1.534 1.534 0 0 0 2.226-1.617l-.863-5.03L20.537 9.2a1.523 1.523 0 0 0 .387-1.575Z"/>
+</svg></span>
+          </div>
+          <turbo-frame id="store-review-images-mobile-show-helpful-count-frame-100565">
+            <div class="flex flex-row gap-4">
+              <form class="button_to" method="post" action="/useorigens/review_feedbacks/100565?status=helpful"><input type="hidden" name="_method" value="put" autocomplete="off" /><button class="flex flex-row gap-2" type="submit">
+                <span class="text-white"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="thumbs-up" clip-path="url(#clip0_324_1595)">
+<g id="Vector">
+<path d="M3.37655 5.81813H0.844138C0.620259 5.81813 0.405549 5.90167 0.247242 6.05037C0.0889357 6.19907 0 6.40075 0 6.61105V13.7473C0 14.1679 0.177871 14.5713 0.494485 14.8687C0.811098 15.1661 1.24052 15.3332 1.68828 15.3332H2.53242C2.98017 15.3332 3.40959 15.1661 3.72621 14.8687C4.04282 14.5713 4.22069 14.1679 4.22069 13.7473V6.61105C4.22069 6.40075 4.13176 6.19907 3.97345 6.05037C3.81514 5.90167 3.60043 5.81813 3.37655 5.81813Z" fill="currentColor"/>
+<path d="M14.3115 5.81813H10.9738L12.289 2.24999C12.3321 1.92348 12.2523 1.59308 12.0634 1.31601C11.8745 1.03894 11.5884 0.832656 11.2546 0.732886C10.9209 0.633115 10.5605 0.646143 10.2358 0.769713C9.91121 0.893282 9.64281 1.11961 9.47714 1.4095C8.50147 2.97356 7.30076 4.40373 5.90897 5.65955V13.2605H6.0052C7.78549 13.7227 10.1423 14.5403 12.3244 14.5403C13.5062 14.5403 13.6683 14.1232 13.9114 13.496L15.8985 7.94553C15.9912 7.70598 16.021 7.44896 15.9855 7.19628C15.9499 6.94359 15.8501 6.70267 15.6944 6.49393C15.5386 6.2852 15.3317 6.11479 15.0909 5.99715C14.8502 5.87951 14.5829 5.8181 14.3115 5.81813Z" fill="currentColor"/>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_324_1595">
+<rect width="16" height="16" fill="white"/>
+</clipPath>
+</defs>
+</svg></span>
+                <p class="text-xs font-medium leading-5 text-white"> 0</p>
+</button><input type="hidden" name="authenticity_token" value="7skwSbbNlnZeqn0p3hmffWsnP_ZKMf8gJuQg0QOtOh3ajWbyfHBeioJmtQ6SDC2qY_7QxVHw7-x2LsRWHD33dA" autocomplete="off" /></form>            </div>
+</turbo-frame>        </div>
+        <div>
+          <p class="text-white md:text-gray-900 font-semibold leading-normal text-base">Cliente 1.</p>
+          <p class="text-white md:text-gray-500 leading-5 font-normal text-sm"> 19 de Setembro de 2026 </p>
+        </div>
+        <p class="text-white md:text-gray-900 leading-normal font-normal text-sm flex flex-row items-center gap-1"> 
+          <span class="text-green-500"><svg width="14" height="15" viewBox="0 0 14 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="badge-check" clip-path="url(#clip0_164_9441)">
+<path id="Vector" d="M13.389 6.02568L12.7649 5.40071C12.6328 5.26932 12.5605 5.09414 12.5605 4.90852V4.02424C12.5605 2.87441 11.625 1.93869 10.4753 1.93869H9.5912C9.4084 1.93869 9.22907 1.8643 9.09979 1.735L8.47493 1.11003C7.6617 0.296658 6.33969 0.296658 5.52646 1.11003L4.90021 1.735C4.77093 1.8643 4.5916 1.93869 4.4088 1.93869H3.52468C2.37504 1.93869 1.43948 2.87441 1.43948 4.02424V4.90852C1.43948 5.09414 1.36719 5.26932 1.23583 5.40071L0.610962 6.02499C0.21686 6.41916 0 6.94333 0 7.50017C0 8.05702 0.217555 8.58119 0.610962 8.97466L1.23513 9.59964C1.36719 9.73103 1.43948 9.90621 1.43948 10.0918V10.9761C1.43948 12.1259 2.37504 13.0617 3.52468 13.0617H4.4088C4.5916 13.0617 4.77093 13.136 4.90021 13.2653L5.52507 13.891C5.93169 14.297 6.4655 14.5 6.99931 14.5C7.53311 14.5 8.06693 14.297 8.47354 13.8903L9.0984 13.2653C9.22907 13.136 9.4084 13.0617 9.5912 13.0617H10.4753C11.625 13.0617 12.5605 12.1259 12.5605 10.9761V10.0918C12.5605 9.90621 12.6328 9.73103 12.7649 9.59964L13.389 8.97536C13.7824 8.58119 14 8.05771 14 7.50017C14 6.94263 13.7831 6.41916 13.389 6.02568ZM10.166 6.6882L5.99563 9.46894C5.87817 9.5475 5.74332 9.58573 5.60987 9.58573C5.43054 9.58573 5.25261 9.51621 5.11846 9.38204L3.72833 7.99167C3.45656 7.71985 3.45656 7.2805 3.72833 7.00868C4.0001 6.73686 4.43938 6.73686 4.71115 7.00868L5.69814 7.99584L9.3945 5.53141C9.71492 5.31799 10.1459 5.40419 10.3586 5.72397C10.5719 6.04376 10.4858 6.47547 10.166 6.6882Z" fill="currentColor"/>
+</g>
+<defs>
+<clipPath id="clip0_164_9441">
+<rect width="14" height="14" fill="white" transform="translate(0 0.5)"/>
+</clipPath>
+</defs>
+</svg>
+</span>
+          Compra verificada 
+        </p>
+        <p class="md:text-sm font-medium leading-5 text-white md:text-gray-900"> 
+          Produtos comprados: <br>
+            <span class="text-white md:text-gray-500 text-sm leading-5 font-normal underline">Produto exemplo</span>
+              <span class="text-white md:text-gray-500 text-sm leading-5 font-normal">, </span>
+            <span class="text-white md:text-gray-500 text-sm leading-5 font-normal underline">Produto exemplo</span>
+              <span class="text-white md:text-gray-500 text-sm leading-5 font-normal">, </span>
+            <span class="text-white md:text-gray-500 text-sm leading-5 font-normal underline">Produto exemplo</span>
+        </p>
+      </div>
+      <div class="flex flex-col gap-2 md:gap-4">
+        <p class="text-base text-white md:text-gray-500 leading-6 font-normal">
+                Texto de avaliação anonimizado 1.
+              </p>
+        <turbo-frame class="hidden md:block" id="store-review-images-show-helpful-count-frame-100565">
+          <div class="flex flex-row gap-4">
+            <p class="text-white md:text-gray-500 font-medium text-sm leading-5"> Isso foi útil para você? </p>
+            <form class="button_to" method="post" action="/useorigens/review_feedbacks/100565?status=helpful"><input type="hidden" name="_method" value="put" autocomplete="off" /><button class="flex flex-row gap-2" type="submit">
+              <span class="text-gray-500"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="thumbs-up" clip-path="url(#clip0_324_1595)">
+<g id="Vector">
+<path d="M3.37655 5.81813H0.844138C0.620259 5.81813 0.405549 5.90167 0.247242 6.05037C0.0889357 6.19907 0 6.40075 0 6.61105V13.7473C0 14.1679 0.177871 14.5713 0.494485 14.8687C0.811098 15.1661 1.24052 15.3332 1.68828 15.3332H2.53242C2.98017 15.3332 3.40959 15.1661 3.72621 14.8687C4.04282 14.5713 4.22069 14.1679 4.22069 13.7473V6.61105C4.22069 6.40075 4.13176 6.19907 3.97345 6.05037C3.81514 5.90167 3.60043 5.81813 3.37655 5.81813Z" fill="currentColor"/>
+<path d="M14.3115 5.81813H10.9738L12.289 2.24999C12.3321 1.92348 12.2523 1.59308 12.0634 1.31601C11.8745 1.03894 11.5884 0.832656 11.2546 0.732886C10.9209 0.633115 10.5605 0.646143 10.2358 0.769713C9.91121 0.893282 9.64281 1.11961 9.47714 1.4095C8.50147 2.97356 7.30076 4.40373 5.90897 5.65955V13.2605H6.0052C7.78549 13.7227 10.1423 14.5403 12.3244 14.5403C13.5062 14.5403 13.6683 14.1232 13.9114 13.496L15.8985 7.94553C15.9912 7.70598 16.021 7.44896 15.9855 7.19628C15.9499 6.94359 15.8501 6.70267 15.6944 6.49393C15.5386 6.2852 15.3317 6.11479 15.0909 5.99715C14.8502 5.87951 14.5829 5.8181 14.3115 5.81813Z" fill="currentColor"/>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_324_1595">
+<rect width="16" height="16" fill="white"/>
+</clipPath>
+</defs>
+</svg></span>
+              <p class="text-gray-900 text-xs font-medium leading-5"> 0</p>
+</button><input type="hidden" name="authenticity_token" value="SX_znTAV9OAsS5VwRWQtmZAomY4Wk0OFvRFUvXl6Rup9O6Um-qg8HPCHXVcJcZ9OmPF2vQ1SU0nt27A6ZuqLgw" autocomplete="off" /></form>          </div>
+</turbo-frame>      </div>
+    </div>
+  </div>
+</template></turbo-stream>
+<turbo-stream action="update" target="review_image_frame"><template>
+  <div id="review-image">
+    <div class="flex flex-col items-end gap-4 top-12 right-1/2 md:w-fit absolute">
+      <span class="text-gray-100 font-semibold leading-5"> 1/1 </span> 
+    </div>
+    <img alt="Foto enviada na avaliação" class="xl:h-[600px] xl:max-w-[600px] h-screen object-cover" src="https://gcp-images.majestic.ink.rsvcloud.com/images/product_v2/main_image/2aa29cde00cb2c1a64788d8c26cba776.webp" />
+    <form class="absolute top-1/2 left-0" data-turbo="true" data-turbo-stream="true" action="/useorigens/store_review_images/9719" accept-charset="UTF-8" method="get">
+      <button>
+        <span class="w-4 h-4 [&amp;&gt;svg]:h-5 [&amp;&gt;svg]:w-5 flex justify-center items-center text-gray-200 cursor-pointer"><svg width="7" height="10" viewBox="0 0 7 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M6.20703 0.292787C6.3945 0.480314 6.49982 0.734622 6.49982 0.999786C6.49982 1.26495 6.3945 1.51926 6.20703 1.70679L2.91403 4.99979L6.20703 8.29279C6.38919 8.48139 6.48998 8.73399 6.4877 8.99619C6.48543 9.25838 6.38026 9.5092 6.19485 9.6946C6.00944 9.88001 5.75863 9.98518 5.49643 9.98746C5.23423 9.98974 4.98163 9.88894 4.79303 9.70679L0.793031 5.70679C0.60556 5.51926 0.500244 5.26495 0.500244 4.99979C0.500244 4.73462 0.60556 4.48031 0.793031 4.29279L4.79303 0.292787C4.98056 0.105316 5.23487 0 5.50003 0C5.76519 0 6.0195 0.105316 6.20703 0.292787V0.292787Z" fill="currentColor"/>
+</svg>
+</span>
+      </button>
+</form>    <form class="absolute top-1/2 right-0" data-turbo="true" data-turbo-stream="true" action="/useorigens/store_review_images/9719" accept-charset="UTF-8" method="get">
+      <button>
+      <span class="w-4 h-4 [&amp;&gt;svg]:h-5 [&amp;&gt;svg]:w-5 flex justify-center items-center text-gray-200 cursor-pointer"><svg width="7" height="10" viewBox="0 0 7 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M0.793031 9.70692C0.60556 9.51939 0.500244 9.26508 0.500244 8.99992C0.500244 8.73475 0.60556 8.48045 0.793031 8.29292L4.08603 4.99992L0.793031 1.70692C0.610873 1.51832 0.510078 1.26571 0.512356 1.00352C0.514635 0.741321 0.619804 0.490509 0.805212 0.305101C0.99062 0.119692 1.24143 0.0145233 1.50363 0.0122448C1.76583 0.00996641 2.01843 0.110761 2.20703 0.292919L6.20703 4.29292C6.3945 4.48045 6.49982 4.73475 6.49982 4.99992C6.49982 5.26508 6.3945 5.51939 6.20703 5.70692L2.20703 9.70692C2.0195 9.89439 1.76519 9.99971 1.50003 9.99971C1.23487 9.99971 0.980558 9.89439 0.793031 9.70692Z" fill="currentColor"/>
+</svg>
+</span>
+      </button>
+</form>  </div>
+</template></turbo-stream>

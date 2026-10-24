@@ -1,0 +1,16 @@
+# Somente desenvolvimento local (wrangler dev). Sem rotas, sem domínio, sem deploy.
+name = "personalizacoes-ink-local"
+main = "src/worker/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = false
+send_metrics = false
+
+[vars]
+CONFIG_SERVICE_URL = "http://127.0.0.1:4001"
+ORIGIN_MODE = "dev-origin"
+CONFIG_TIMEOUT_MS = "1500"
+ADMIN_ORIGIN = "http://127.0.0.1:4000"
+
+[dev]
+ip = "127.0.0.1"
+port = 8787
