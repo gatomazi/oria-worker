@@ -1,9 +1,9 @@
 // M05 — Cupons em destaque e em abas. Copiar só copia; "Usar no carrinho" só
 // preenche o campo de cupom da própria INK (a INK valida e aplica). Nunca
 // afirma que o desconto foi aplicado.
-import { copyText, formatWhen, h, selectContents, shadowHost, Undo } from '../runtime/dom.ts';
-import { afterHeader, beforeFooter, belowPrice, insertAt, whenFrameReady } from '../runtime/page.ts';
-import { parseProductPromotions } from '../../shared/ink-parse.ts';
+import { copyText, fetchDoc, formatWhen, h, selectContents, shadowHost, Undo } from '../runtime/dom.ts';
+import { afterHeader, beforeFooter, belowPrice, insertAt } from '../runtime/page.ts';
+import { parseProductPromotions, type NativeCoupon } from '../../shared/ink-parse.ts';
 import type { ClientModule, ModuleContext } from '../runtime/types.ts';
 
 interface Campaign {
@@ -16,6 +16,8 @@ interface Campaign {
   firstPurchase: boolean;
   nearPrice: boolean;
   badge: string;
+  /** Lido do frame nativo da INK (vale para o produto da página). */
+  fromInk?: boolean;
 }
 
 export const MESSAGES = {
@@ -88,126 +90,159 @@ const couponsModule: ClientModule = {
     const live = s.campaigns.filter((c) => effective(c, now));
     const next = nextTransition(s.campaigns, now);
     if (next) ctx.requestReconcile(next);
-    // Cupons que a própria INK oferece para este produto (mesmo código e regras); os do painel vêm antes.
-    if (s.inkCoupons && ctx.page === 'product') {
-      const frame = document.querySelector('#product_promotions_frame');
-      if (await whenFrameReady(frame, signal)) {
-        for (const n of parseProductPromotions(frame!)) {
-          if (live.some((c) => c.code.toUpperCase() === n.code.toUpperCase())) continue;
-          const tiers = n.rules.filter((r) => /^\d+\s*ite/i.test(r));
-          live.push({
-            title: n.firstPurchase ? `Primeira compra${n.off ? `: ${n.off}` : ''}` : tiers.length ? 'Leve mais, pague menos' : n.off ? `Cupom ${n.off}` : `Cupom ${n.code}`,
-            description: n.savings,
-            code: n.code,
-            conditions: `Regras da loja: ${n.rules.join('; ')}.`,
-            startsAt: null,
-            endsAt: null,
-            firstPurchase: n.firstPurchase,
-            nearPrice: n.firstPurchase && !!n.off,
-            badge: n.firstPurchase && n.off ? `${n.off} na 1ª compra` : '',
-          });
-        }
-      }
-      if (signal.aborted) return null;
-    }
-    if (!live.length) return null;
-
-    const undo = new Undo();
     const timers = new Set<ReturnType<typeof setTimeout>>();
+    const render = (live: Campaign[]): (() => void) => {
+      const undo = new Undo();
 
-    // Bloco principal
-    if (s.blockPages.includes(ctx.page)) {
-      const spot = s.position === 'antes-rodape' ? beforeFooter() : afterHeader();
-      if (spot) {
-        const { host, root } = shadowHost('coupons', ctx.theme, CSS);
-        host.style.setProperty('--bg', s.colors.bg);
-        host.style.setProperty('--fg', s.colors.fg);
-        host.style.setProperty('--ac', s.accent.bg);
-        host.style.setProperty('--on-ac', s.accent.fg);
-        root.append(h('style', {}, `:host{--bg:${s.colors.bg};--fg:${s.colors.fg};--ac:${s.accent.bg};--on-ac:${s.accent.fg}}`));
-        const wrap = h('section', { class: 'wrap', 'aria-label': 'Cupons da loja' });
-        const shown = s.mode === 'unico' ? live.slice(0, 1) : live;
-        const cards = shown.map((c, i) => card(c, i, root, signal, timers));
-        if (s.mode === 'abas' && cards.length > 1) {
-          const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Campanhas' });
-          const buttons = shown.map((c, i) => {
-            const b = h('button', { class: 'tab', role: 'tab', type: 'button', id: `pk-tab-${i}`, 'aria-controls': `pk-panel-${i}`, 'aria-selected': i === 0 ? 'true' : 'false', tabindex: i === 0 ? '0' : '-1' }, c.title);
-            return b;
-          });
-          const select = (i: number, focus = false) => {
-            buttons.forEach((b, j) => {
-              b.setAttribute('aria-selected', String(i === j));
-              b.tabIndex = i === j ? 0 : -1;
-              cards[j]!.hidden = i !== j;
-            });
-            if (focus) buttons[i]!.focus();
-          };
-          buttons.forEach((b, i) => {
-            b.addEventListener('click', () => select(i), { signal });
-            b.addEventListener(
-              'keydown',
-              (e) => {
-                const k = (e as KeyboardEvent).key;
-                if (k === 'ArrowRight' || k === 'ArrowLeft') {
-                  e.preventDefault();
-                  select((i + (k === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length, true);
-                }
-              },
-              { signal },
-            );
-          });
-          cards.forEach((c, i) => {
-            c.id = `pk-panel-${i}`;
-            c.setAttribute('role', 'tabpanel');
-            c.setAttribute('aria-labelledby', `pk-tab-${i}`);
-            c.hidden = i !== 0;
-          });
-          tabs.append(...buttons);
-          wrap.append(tabs, ...cards);
-        } else {
-          wrap.append(h('div', { class: 'list' }, ...cards));
-        }
-        root.append(wrap);
-        insertAt(spot, host);
-        ctx.cart.onChange(() => {
-          const has = !!cartCouponInput();
-          root.querySelectorAll<HTMLButtonElement>('.use').forEach((b) => (b.hidden = !has));
-        }, signal);
-        undo.add(() => host.remove());
-      }
-    }
-
-    // Selo perto do preço: cards de produto e página do produto.
-    const badge = live.find((c) => c.nearPrice && c.badge);
-    if (badge) {
-      const mk = () => {
-        const b = h('span', { 'data-pink-module': 'coupons', 'data-pink-badge': '' }, badge.badge);
-        b.title = badge.firstPurchase ? `${badge.badge} — cupom ${badge.code}, só na primeira compra` : `${badge.badge} — cupom ${badge.code}`;
-        b.style.cssText = `display:inline-block;align-self:flex-start;justify-self:start;width:max-content;max-width:100%;margin:4px 0 0;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.5;background:${s.accent.bg};color:${s.accent.fg};white-space:nowrap`;
-        return b;
-      };
-      document.querySelectorAll('.card-thumb .card-thumb__prices-v2').forEach((price) => {
-        const b = mk();
-        undo.insert(b, price.parentNode!, price.nextSibling);
-      });
-      if (ctx.page === 'product') {
-        const spot = belowPrice();
+      // Bloco principal
+      if (s.blockPages.includes(ctx.page)) {
+        const spot = s.position === 'antes-rodape' ? beforeFooter() : afterHeader();
         if (spot) {
-          const b = mk();
-          b.style.margin = '8px 0 0';
-          undo.insert(b, spot.parent, spot.before);
+          const { host, root } = shadowHost('coupons', ctx.theme, CSS);
+          host.style.setProperty('--bg', s.colors.bg);
+          host.style.setProperty('--fg', s.colors.fg);
+          host.style.setProperty('--ac', s.accent.bg);
+          host.style.setProperty('--on-ac', s.accent.fg);
+          root.append(h('style', {}, `:host{--bg:${s.colors.bg};--fg:${s.colors.fg};--ac:${s.accent.bg};--on-ac:${s.accent.fg}}`));
+          const wrap = h('section', { class: 'wrap', 'aria-label': 'Cupons da loja' });
+          const shown = s.mode === 'unico' ? live.slice(0, 1) : live;
+          const cards = shown.map((c, i) => card(c, i, root, signal, timers));
+          if (s.mode === 'abas' && cards.length > 1) {
+            const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Campanhas' });
+            const buttons = shown.map((c, i) => {
+              const b = h('button', { class: 'tab', role: 'tab', type: 'button', id: `pk-tab-${i}`, 'aria-controls': `pk-panel-${i}`, 'aria-selected': i === 0 ? 'true' : 'false', tabindex: i === 0 ? '0' : '-1' }, c.title);
+              return b;
+            });
+            const select = (i: number, focus = false) => {
+              buttons.forEach((b, j) => {
+                b.setAttribute('aria-selected', String(i === j));
+                b.tabIndex = i === j ? 0 : -1;
+                cards[j]!.hidden = i !== j;
+              });
+              if (focus) buttons[i]!.focus();
+            };
+            buttons.forEach((b, i) => {
+              b.addEventListener('click', () => select(i), { signal });
+              b.addEventListener(
+                'keydown',
+                (e) => {
+                  const k = (e as KeyboardEvent).key;
+                  if (k === 'ArrowRight' || k === 'ArrowLeft') {
+                    e.preventDefault();
+                    select((i + (k === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length, true);
+                  }
+                },
+                { signal },
+              );
+            });
+            cards.forEach((c, i) => {
+              c.id = `pk-panel-${i}`;
+              c.setAttribute('role', 'tabpanel');
+              c.setAttribute('aria-labelledby', `pk-tab-${i}`);
+              c.hidden = i !== 0;
+            });
+            tabs.append(...buttons);
+            wrap.append(tabs, ...cards);
+          } else {
+            wrap.append(h('div', { class: 'list' }, ...cards));
+          }
+          root.append(wrap);
+          insertAt(spot, host);
+          ctx.cart.onChange(() => {
+            const has = !!cartCouponInput();
+            root.querySelectorAll<HTMLButtonElement>('.use').forEach((b) => (b.hidden = !has));
+          }, signal);
+          undo.add(() => host.remove());
         }
       }
+
+      // Selo perto do preço: cards de produto e página do produto.
+      // Selo nos cards só com campanha do painel: o cupom lido da INK vale para ESTE produto.
+      const badge = live.find((c) => c.nearPrice && c.badge && !c.fromInk);
+      const productBadge = live.find((c) => c.nearPrice && c.badge);
+      if (badge || productBadge) {
+        const mk = (badge: Campaign) => {
+          const b = h('span', { 'data-pink-module': 'coupons', 'data-pink-badge': '' }, badge.badge);
+          b.title = badge.firstPurchase ? `${badge.badge} — cupom ${badge.code}, só na primeira compra` : `${badge.badge} — cupom ${badge.code}`;
+          b.style.cssText = `display:inline-block;align-self:flex-start;justify-self:start;width:max-content;max-width:100%;margin:4px 0 0;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.5;background:${s.accent.bg};color:${s.accent.fg};white-space:nowrap`;
+          return b;
+        };
+        if (badge) document.querySelectorAll('.card-thumb .card-thumb__prices-v2').forEach((price) => {
+          const b = mk(badge);
+          undo.insert(b, price.parentNode!, price.nextSibling);
+        });
+        if (ctx.page === 'product' && productBadge) {
+          const spot = belowPrice();
+          if (spot) {
+            const b = mk(productBadge);
+            b.style.margin = '8px 0 0';
+            undo.insert(b, spot.parent, spot.before);
+          }
+        }
+      }
+      return () => undo.run();
+    };
+
+    // Cupons do painel aparecem na hora. Os que a própria INK oferece para este produto
+    // (mesmo código e regras) chegam depois e entram em seguida, sem repetir códigos.
+    let teardown = live.length ? render(live) : null;
+    if (s.inkCoupons && ctx.page === 'product') {
+      const fromInk = loadInkCoupons(signal).then((found) => found.filter((n) => !live.some((c) => c.code.toUpperCase() === n.code.toUpperCase())));
+      if (!teardown) {
+        const add = await fromInk;
+        if (signal.aborted || !add.length) return null;
+        teardown = render(add);
+      } else {
+        void fromInk.then((add) => {
+          if (signal.aborted || !add.length) return;
+          teardown?.();
+          teardown = render([...live, ...add]);
+        });
+      }
     }
+    if (!teardown) return null;
 
     return {
       destroy() {
         timers.forEach((t) => clearTimeout(t));
-        undo.run();
+        teardown?.();
       },
     };
   },
 };
+
+/** Cupons do frame nativo product_promotions. O frame é "lazy" (só carrega ao rolar): lê o endereço dele direto. */
+async function loadInkCoupons(signal: AbortSignal): Promise<Campaign[]> {
+  const frame = document.querySelector('#product_promotions_frame');
+  if (!frame) return [];
+  let found: NativeCoupon[] = [];
+  try {
+    const src = frame.getAttribute('src');
+    if (frame.hasAttribute('complete') || !src) found = parseProductPromotions(frame);
+    else {
+      const url = new URL(src, location.href);
+      if (url.origin !== location.origin) return [];
+      found = parseProductPromotions(await fetchDoc(url.pathname + url.search, signal));
+    }
+  } catch {
+    return [];
+  }
+  return found.map((n) => {
+    const tiers = n.rules.filter((r) => /^\d+\s*ite/i.test(r));
+    return {
+      title: n.firstPurchase ? `Primeira compra${n.off ? `: ${n.off}` : ''}` : tiers.length ? 'Leve mais, pague menos' : n.off ? `Cupom ${n.off}` : `Cupom ${n.code}`,
+      description: n.savings,
+      code: n.code,
+      conditions: `Regras da loja: ${n.rules.join('; ')}.`,
+      startsAt: null,
+      endsAt: null,
+      firstPurchase: n.firstPurchase,
+      nearPrice: n.firstPurchase && !!n.off,
+      badge: n.firstPurchase && n.off ? `${n.off} na 1ª compra` : '',
+      fromInk: true,
+    };
+  });
+}
 
 function card(c: Campaign, i: number, root: ShadowRoot, signal: AbortSignal, timers: Set<ReturnType<typeof setTimeout>>): HTMLElement {
   const code = h('span', { class: 'code', 'aria-label': `Código do cupom: ${c.code}` }, c.code);

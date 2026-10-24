@@ -264,24 +264,41 @@ test('M01: sugestões na busca nativa — peças da busca da loja, vazio e erro,
 
 // ---------------------------------------------------------------- M07
 
-test('M05: cupons da INK no produto entram no bloco (sem repetir os do painel) e a 1ª compra vira selo', async () => {
+test('M05: cupons da INK (frame lazy, ainda não carregado): painel aparece na hora, os da INK chegam depois, sem repetir código; selo da INK só no produto principal', async () => {
   const cfg = configWith({ coupons: { mode: 'lista', inkCoupons: true, pages: ['product'], campaigns: [coupon({ code: 'LEVEMAISEXEMPLO', title: 'Do painel' })] } });
   const env = setup(PDP, PDP_PATH, cfg);
-  env.loadFrame('product_promotions_frame', fixture('pdp-frame-product-promotions-com-cupons.html'));
+  // Um card de outro produto na página (vitrine de recomendações).
+  env.document.body.insertAdjacentHTML('beforeend', '<div class="card-thumb"><div class="card-thumb__prices-v2">R$ 99,90</div></div>');
+  const frame = env.document.querySelector('#product_promotions_frame')!;
+  assert.equal(frame.getAttribute('loading'), 'lazy');
+  assert.equal(frame.hasAttribute('complete'), false);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  env.route('/vistaentrenos/products/4976077/product_promotions', async () => {
+    await gate;
+    return new Response(fixture('pdp-frame-product-promotions-com-cupons.html'), { headers: { 'content-type': 'text/html' } });
+  });
   env.run();
-  await env.mountedAfter(150);
+  await env.mountedAfter(100);
+  assert.match(env.shadow('coupons')!.textContent ?? '', /Do painel/, 'cupom do painel não espera a INK');
+  assert.doesNotMatch(env.shadow('coupons')!.textContent ?? '', /PRIMEIRAEXEMPLO/);
+  release();
+  await env.tick(150);
   const text = env.shadow('coupons')!.textContent ?? '';
   assert.match(text, /Do painel/);
   assert.equal(text.match(/LEVEMAISEXEMPLO/g)?.length, 1, 'código do painel não se repete');
   assert.match(text, /Primeira compra: R\$10,00 OFF/);
   assert.match(text, /Regras da loja: R\$10,00 OFF; Somente primeira compra\./);
-  const badge = env.document.querySelector('[data-pink-badge]');
-  assert.equal(badge?.textContent, 'R$10,00 OFF na 1ª compra');
+  const badges = [...env.document.querySelectorAll('[data-pink-badge]')];
+  assert.equal(badges.length, 1, 'selo só no preço do produto principal, não no card de outro produto');
+  assert.equal(badges[0]!.textContent, 'R$10,00 OFF na 1ª compra');
+  assert.equal(badges[0]!.closest('.card-thumb'), null);
+  assert.equal(env.document.querySelectorAll('[data-pink-module="coupons"]:not([data-pink-badge])').length, 1, 'um bloco só');
 });
 
 test('M05: só cupons da INK, mas a loja não tem nenhum: nada aparece', async () => {
   const env = setup(PDP, PDP_PATH, configWith({ coupons: { inkCoupons: true, pages: ['product'], campaigns: [] } }));
-  env.loadFrame('product_promotions_frame', fixture('pdp-frame-product-promotions.html'));
+  env.route('/vistaentrenos/products/4976077/product_promotions', () => new Response(fixture('pdp-frame-product-promotions.html'), { headers: { 'content-type': 'text/html' } }));
   env.run();
   await env.mountedAfter(150);
   assert.equal(env.host('coupons'), null);
@@ -416,6 +433,18 @@ test('M11: tabela da modelagem certa e sugestão explicável por medida de peça
   root.querySelector('form')!.dispatchEvent(new env.window.Event('submit', { cancelable: true }));
   assert.match(root.querySelector('.out')!.textContent ?? '', /Mais próximo da sua peça: M \(1 cm mais estreita, mesmo comprimento\)\. Se prefere mais justo: P; mais folgado: G\./);
   assert.match(root.querySelector('.out')!.textContent ?? '', /não uma garantia/);
+});
+
+test('M11: link nativo de medidas ligado ao formulário por form= (fora do <form>): guia fica ao lado dele', async () => {
+  const env = setup(PDP, PDP_PATH, configWith({ sizeGuide: { tables: [{ name: 'Camiseta adulto', match: 'camiseta', rows: [{ size: 'M', width: 53, length: 72 }], note: '' }] } }));
+  env.loadFrame('product_variants_options_frame', fixture('pdp-frame-product-variants.html'));
+  const link = env.document.querySelector('#open-modal-size')!;
+  const form = link.closest('form')!;
+  link.setAttribute('form', form.id);
+  form.after(link); // como em lojas do layout clássico
+  env.run();
+  await env.mountedAfter(100);
+  assert.equal(env.host('sizeGuide')!.previousSibling, link);
 });
 
 // ---------------------------------------------------------------- M12

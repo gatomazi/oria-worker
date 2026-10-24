@@ -167,7 +167,7 @@ test('proxy com carrinho liberado: só POST de carrinho passa (com sessão e ori
   const sent = hits.slice(n).find((h) => h.startsWith('POST www.vistaentrenos.com.br/vistaentrenos/cart'));
   assert.ok(sent?.includes('cookie=_reserva_ink_store_session=abc'));
   assert.ok(sent?.includes('origin=https://www.vistaentrenos.com.br'));
-  for (const path of ['/vistaentrenos/cart/checkout_cart_items', '/vistaentrenos/checkout/contact_and_shipping_details', '/vistaentrenos/store_sessions', '/vistaentrenos/orders', '/vistaentrenos/review_feedbacks/1']) {
+  for (const path of ['/vistaentrenos/cart/checkout_cart_items', '/vistaentrenos/checkout/contact_and_shipping_details', '/vistaentrenos/store_sessions', '/vistaentrenos/orders', '/vistaentrenos/review_feedbacks/1', '/ahoy/visits', '/ahoy/events', '/vistaentrenos/ahoy/events']) {
     assert.equal((await go(`http://vistacart.localhost:8787${path}`, { method: 'POST', body: 'x' })).res.status, 405, path);
   }
 });

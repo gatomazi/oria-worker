@@ -30,6 +30,20 @@ export function mainProductForm(): HTMLFormElement | null {
   return [...document.querySelectorAll<HTMLFormElement>('form[id^="form-product-"]')].find((f) => !f.closest(OUTSIDE_MAIN)) ?? null;
 }
 
+/**
+ * Link nativo "Confira suas medidas" do produto principal. A INK o liga ao formulário
+ * pelo atributo form=, e ele pode ficar fora do <form> no DOM.
+ */
+export function nativeSizeLink(): HTMLElement | null {
+  const form = mainProductForm();
+  if (!form) return null;
+  return (
+    form.querySelector<HTMLElement>('#open-modal-size') ??
+    [...document.querySelectorAll<HTMLElement>('#open-modal-size')].find((a) => a.getAttribute('form') === form.id && !a.closest(OUTSIDE_MAIN)) ??
+    null
+  );
+}
+
 export function productInfo() {
   return parseProductPage(document);
 }

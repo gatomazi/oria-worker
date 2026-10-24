@@ -2,7 +2,7 @@
 // tabelas por modelagem e uma ajuda explicável — comparar com uma peça que a
 // pessoa já tem e veste bem. Sem fórmula de altura/peso.
 import { h, shadowHost, Undo } from '../runtime/dom.ts';
-import { belowPrice, mainProductForm, productInfo, whenFrameReady } from '../runtime/page.ts';
+import { belowPrice, mainProductForm, nativeSizeLink, productInfo, whenFrameReady } from '../runtime/page.ts';
 import type { ClientModule, ModuleContext } from '../runtime/types.ts';
 
 export interface SizeRow {
@@ -126,10 +126,10 @@ const sizeGuideModule: ClientModule = {
     }, { signal });
 
     // Ao lado do link nativo (dentro do quadro de variantes, que carrega depois); senão abaixo do preço.
-    const frame = mainProductForm()?.querySelector('#product_variants_options_frame') ?? null;
+    const frame = mainProductForm()?.querySelector('#product_variants_options_frame') ?? document.querySelector('#product_variants_options_frame');
     const place = () => {
       if (signal.aborted) return;
-      const nativeLink = mainProductForm()?.querySelector('#open-modal-size') ?? null;
+      const nativeLink = nativeSizeLink();
       if (nativeLink?.parentNode) {
         if (host.previousSibling !== nativeLink) nativeLink.parentNode.insertBefore(host, nativeLink.nextSibling);
       } else if (!host.isConnected) {
