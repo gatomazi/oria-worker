@@ -88,13 +88,13 @@ Legenda:
 
 | Módulo | Situação | O que foi testado | Fonte de dados / dependência |
 | --- | --- | --- | --- |
-| M01 Cabeçalho, menu e busca | **B** | jsdom: cores, menu com grupos, busca visível, comportamento ao rolar, carrinho e conta preservados, desfaz exatamente ao original. Réplica (demos) | Cabeçalho nativo da INK (duas barras: celular e computador) |
+| M01 Cabeçalho, menu e busca | **A** | Vista: busca visível com **sugestões enquanto digita** ("abelh" → 5 Abelhinhas com foto e preço, "Ver todos os resultados"), no computador e no celular; `check:loja` com o M01 ligado. jsdom: cores, menu com grupos, comportamento ao rolar, carrinho e conta preservados, sugestões (mínimo de 2 letras, sem nomes repetidos, "Nada encontrado", erro, Esc), desfaz exatamente ao original | Cabeçalho nativo da INK (duas barras: celular e computador). Sugestões leem a busca da própria loja (`products?search_filter=`); Enter continua indo para a busca da INK |
 | M02 Categorias em abas | **A** | Vista: monta na home com 8 produtos reais da coleção, sem erros e sem rolagem lateral. jsdom: troca de aba muda os produtos e o "Ver todos"; atalhos repetidos só somem depois que as abas carregam | Páginas de coleção/listagem da própria loja (cache de 5 min na sessão) |
 | M03 Galeria com miniaturas | **A** | Vista: monta com as miniaturas das fotos reais, sem rolagem lateral no celular. jsdom: uma miniatura por foto navegável, clique aciona só o ponto nativo, variante intacta, acompanha a foto ativa | Carrossel nativo da INK |
 | M04 Compartilhamento | **A** | Vista: monta no produto. jsdom: WhatsApp com mensagem e link canônico limpo, copiar link | Canônico da página |
-| M05 Cupons (único, abas, lista) + selo de 1ª compra | **A** | Vista: bloco na home e selo "10% na 1ª compra" junto ao preço do produto (e2e). "Usar no carrinho" verificado no carrinho real da Vista: preenche o campo de cupom da INK e não envia (a pessoa confirma lá). jsdom: abas, vigência, copiar sem prometer desconto | Campanhas cadastradas no painel (as mesmas da INK). A Vista não tem cupons nativos |
+| M05 Cupons (único, abas, lista) + selo de 1ª compra | **A** | Vista: bloco na home e selo "10% na 1ª compra" junto ao preço do produto (e2e). "Usar no carrinho" verificado no carrinho real da Vista: preenche o campo de cupom da INK e não envia (a pessoa confirma lá). jsdom: abas, vigência, copiar sem prometer desconto | Campanhas cadastradas no painel (as mesmas da INK). Opcional: **cupons cadastrados na INK** lidos do frame nativo `product_promotions` do produto (código, regras, faixas progressivas; "Somente primeira compra" vira selo "R$10,00 OFF na 1ª compra"), sem repetir códigos do painel. Essa leitura é **B**: testada na estrutura nativa (fixture reduzida, códigos fictícios), porque a Vista não tem cupons nativos |
 | M06 Incentivo no carrinho + confirmação após adicionar | **A** | Vista (proxy com carrinho liberado, item de teste removido no fim): adicionar pela página do produto mostra o incentivo no modal "Produto adicionado" da INK; na gaveta, "Faltam 1 peça…" com 1 item e troca de faixa ao aumentar a quantidade. Marcação real capturada em `test/fixtures/ink/cart-drawer-com-item.html` e `last-added-product.html` (tokens removidos). jsdom: faixas, frete nativo com prioridade, participação por coleção pelo id do produto | Gaveta `turbo-frame#cart` e modal `#last_added_product` da INK. A INK **substitui** o `#last_added_product` a cada adição (o módulo refaz a observação). O item do carrinho não tem link do produto: a participação por coleção usa o id |
-| M07 Avaliações com fotos | **B** | Parser e módulo sobre a marcação real da INK (avaliações da Use Origens, só nos testes). A foto abre o depoimento de origem. Sem nota geral. Loja sem avaliações não mostra nada | `/reviews` da própria loja. **A Vista ainda não tem avaliações** |
+| M07 Avaliações com fotos | **B** | Parser e módulo sobre a marcação real da INK (avaliações da Use Origens, só nos testes). A foto abre o depoimento de origem. Sem nota geral. **Nota mínima** (padrão 4★; avaliação 2★ some da vitrine, aparece com "todas") e "só com texto" nas recentes. Loja sem avaliações não mostra nada | `/reviews` da própria loja. **A Vista ainda não tem avaliações** |
 | M08 Cards de vídeo | **B** | Painel no Chrome: envio de arquivo de vídeo, vínculo no M08, publicação e card novo na loja. Réplica e jsdom: cards no início, vídeos vinculados na página do produto, player sem som automático com a peça (nome e preço da página real) | Biblioteca de vídeos da loja (envio de arquivo ou https; servido com Range) |
 | M09 Mini player | **B** | Réplica e jsdom: vídeo da peça com prioridade, fechamento respeitado (sessão/dia), recolhe com carrinho, menu ou modais, cede ao chat | Mesma biblioteca e mesmo player do M08 |
 | M10 Assistente | **A** | Vista: "tem estampa de mãe?" → peças e a coleção Mães; "camiseta de pai" → coleção Pais (o tipo de peça não vira tema); "cachorro" → Pets; "namorado" → Casais; "presente pra vó" e "abelha" → busca da INK (com trecho do nome: "abelh" acha "Abelhinhas"); tema inexistente → "Não encontrei peças com…" e atendimento; dúvida → base de respostas. Testes: rastreio pelo canal nativo, recusa CPF e cartão, limites por visita e por dia | **Sem IA** (decisão do dono): base de respostas da loja, coleções do menu (com sinônimos comuns: papai, mamãe, filho, pet, namorado, fé) e busca nativa da INK. Nomes repetidos (uma cor por produto na INK) aparecem uma vez. Nenhuma chamada externa além da própria loja |
@@ -109,11 +109,15 @@ Legenda:
 - atendimento e descoberta no chat: M10;
 - vídeos na página do produto: M08.
 
-O compartilhamento com recompensa ficou para depois, porque falta a regra de concessão.
+O compartilhamento com recompensa ficou para depois. Na loja de referência observada, a concessão é **por confiança**: o clique no WhatsApp libera o cupom, sem verificação, e o código fica legível no HTML. Se for adotado assim, o cupom precisa ser tratado como público (decisão do dono).
+
+## Layout clássico da INK
+
+A Vista usa o layout novo da INK; outras lojas usam o clássico. Os módulos foram rodados em jsdom sobre páginas de duas lojas INK de referência no layout clássico, gravadas só para leitura (o HTML **não** está no repositório): início e produto, computador e celular, com os frames carregados. Resultado: todos os módulos de início e produto montam, sem erros, nos dois layouts (miniaturas, guia de medidas ao lado do nativo, prazo, selo perto do preço, carrinho). Os seletores usados (`header.header`, `[id^="dot-image-"]`, `#open-modal-size`, `.card-thumb__prices-v2`, `.cart-drawer`, `#last_added_product`, `.cookie-acceptance`, `.form-product-options__add-to-cart-mobile`) existem nos dois. É verificação **B**: não houve instalação nessas lojas.
 
 ## Verificações executadas
 
-- **`npm run check`** (62 testes) cobre:
+- **`npm run check`** (69 testes) cobre:
   - registro e esquema;
   - lojas: isolamento A/B, publicação, liga/desliga só do módulo, restauração, liberação e pausa;
   - acesso por cliente em todas as rotas de loja, CSRF, Host, Origin e convites;
@@ -122,7 +126,7 @@ O compartilhamento com recompensa ficou para depois, porque falta a regra de con
   - parsers;
   - assistente;
   - reinício real do processo.
-- **`npm run e2e`** (27 verificações, Chrome):
+- **`npm run e2e`** (28 verificações, Chrome):
   - operador cria a Vista pelo painel e gera o convite;
   - lojista aceita o convite e configura M05, M02, M03 e M12 pelos formulários;
   - a prévia ao vivo esconde o módulo desativado no rascunho;
@@ -131,9 +135,10 @@ O compartilhamento com recompensa ficou para depois, porque falta a regra de con
   - desligar o M05 e restaurar a versão 1;
   - selo de 1ª compra e miniaturas no produto real;
   - vídeo enviado pelo painel aparecendo na loja;
+  - assistente: "tem estampa de mãe?" traz peças e a coleção Mães;
   - instalação, painel no celular, demos, sem erros de JavaScript dos módulos.
   - Vídeos em `docs/demo/`, capturas em `docs/capturas/r2-*`.
-- **`check:loja`**: Vista, Aurora e Trilha com 15 de 15 cada, em computador e celular, sem rolagem horizontal.
+- **`check:loja`**: em computador e celular, módulos montados, sem erros, sem rolagem horizontal e, no celular, **botões flutuantes sem cobrir a barra de compra, o aviso de cookies nem a ajuda da INK**. Vista: 18 de 18 (com carrinho, assistente e cabeçalho ligados).
 
 **Carregamento:**
 - O carregador tem 10 KB; cada módulo é um arquivo próprio, baixado só onde roda.
@@ -153,7 +158,7 @@ O compartilhamento com recompensa ficou para depois, porque falta a regra de con
 ## Analytics
 
 Na **rodada 1**, as verificações pelo proxy chegaram a enviar visitas e eventos (GTM, gtag, pixel) da Vista a partir de `localhost`. Nesta rodada:
-- o proxy local remove os scripts externos de analytics e, nos scripts da própria loja, troca os domínios de rastreamento por um endereço inválido (o código da loja continua funcionando, nada é enviado);
+- o proxy local remove os scripts externos de analytics (GTM, Google Analytics, Meta, Segment, Konduto/k-analytix, Cloudflare Insights) e, nos scripts da própria loja, troca os domínios de rastreamento por um endereço inválido (o código da loja continua funcionando, nada é enviado);
 - a réplica não os tem;
 - os roteiros no Chrome bloqueiam esses domínios.
 

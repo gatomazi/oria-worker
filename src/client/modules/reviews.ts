@@ -37,7 +37,7 @@ const stars = (n: number) => '★'.repeat(Math.max(0, Math.min(5, n))) + '☆'.r
 
 const reviewsModule: ClientModule = {
   async mount(ctx: ModuleContext) {
-    const s = ctx.settings as { title: string; selection: string; highlights: string[]; max: number; layout: string; showRating: boolean; position: string; colors: { bg: string; fg: string } };
+    const s = ctx.settings as { title: string; selection: string; highlights: string[]; minRating?: number; requireText?: boolean; max: number; layout: string; showRating: boolean; position: string; colors: { bg: string; fg: string } };
     const { signal } = ctx;
     const sort = s.selection === 'recentes' ? 'recents' : 'rate';
     let data: { reviews: Review[]; photos: ReviewPhoto[] };
@@ -54,6 +54,13 @@ const reviewsModule: ClientModule = {
       photos = photos.filter((p) => want.has(`foto-${p.reviewImageId}`));
       reviews = reviews.filter((r) => want.has(`avaliacao-${r.id}`));
     }
+    // Nota mínima: avaliação baixa não vai para a vitrine (foto sem nota conhecida também fica de fora).
+    const min = s.minRating ?? 1;
+    if (min > 1) {
+      photos = photos.filter((p) => p.rating !== null && p.rating >= min);
+      reviews = reviews.filter((r) => r.rating >= min);
+    }
+    if (s.requireText) reviews = reviews.filter((r) => r.text.trim().length > 0);
     const usePhotos = s.selection !== 'recentes' && photos.length > 0;
     if (!(usePhotos ? photos.length : reviews.length)) return null; // nada publicado: nada aparece
 

@@ -2,7 +2,8 @@
 // preenche o campo de cupom da própria INK (a INK valida e aplica). Nunca
 // afirma que o desconto foi aplicado.
 import { copyText, formatWhen, h, selectContents, shadowHost, Undo } from '../runtime/dom.ts';
-import { afterHeader, beforeFooter, belowPrice, insertAt } from '../runtime/page.ts';
+import { afterHeader, beforeFooter, belowPrice, insertAt, whenFrameReady } from '../runtime/page.ts';
+import { parseProductPromotions } from '../../shared/ink-parse.ts';
 import type { ClientModule, ModuleContext } from '../runtime/types.ts';
 
 interface Campaign {
@@ -72,7 +73,7 @@ function cartCouponInput(): HTMLInputElement | null {
 }
 
 const couponsModule: ClientModule = {
-  mount(ctx: ModuleContext) {
+  async mount(ctx: ModuleContext) {
     const s = ctx.settings as {
       mode: string;
       position: string;
@@ -80,15 +81,38 @@ const couponsModule: ClientModule = {
       colors: { bg: string; fg: string };
       accent: { bg: string; fg: string };
       campaigns: Campaign[];
+      inkCoupons?: boolean;
     };
+    const { signal } = ctx;
     const now = Date.now();
     const live = s.campaigns.filter((c) => effective(c, now));
     const next = nextTransition(s.campaigns, now);
     if (next) ctx.requestReconcile(next);
+    // Cupons que a própria INK oferece para este produto (mesmo código e regras); os do painel vêm antes.
+    if (s.inkCoupons && ctx.page === 'product') {
+      const frame = document.querySelector('#product_promotions_frame');
+      if (await whenFrameReady(frame, signal)) {
+        for (const n of parseProductPromotions(frame!)) {
+          if (live.some((c) => c.code.toUpperCase() === n.code.toUpperCase())) continue;
+          const tiers = n.rules.filter((r) => /^\d+\s*ite/i.test(r));
+          live.push({
+            title: n.firstPurchase ? `Primeira compra${n.off ? `: ${n.off}` : ''}` : tiers.length ? 'Leve mais, pague menos' : n.off ? `Cupom ${n.off}` : `Cupom ${n.code}`,
+            description: n.savings,
+            code: n.code,
+            conditions: `Regras da loja: ${n.rules.join('; ')}.`,
+            startsAt: null,
+            endsAt: null,
+            firstPurchase: n.firstPurchase,
+            nearPrice: n.firstPurchase && !!n.off,
+            badge: n.firstPurchase && n.off ? `${n.off} na 1ª compra` : '',
+          });
+        }
+      }
+      if (signal.aborted) return null;
+    }
     if (!live.length) return null;
 
     const undo = new Undo();
-    const { signal } = ctx;
     const timers = new Set<ReturnType<typeof setTimeout>>();
 
     // Bloco principal

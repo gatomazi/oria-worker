@@ -208,6 +208,37 @@ export function parseReviews(root: ParentNode): { reviews: Review[]; photos: Rev
 // ------------------------------------------------------------------ carrinho
 
 /** Lê o carrinho renderizado pela INK (turbo-frame#cart). null = estrutura desconhecida. */
+export interface NativeCoupon {
+  code: string;
+  /** "Você economiza até R$60,00 na compra" */
+  savings: string;
+  /** Regras como a INK escreve: "Promoção progressiva", "2 itens - R$20,00 OFF", "Mínimo do carrinho: 2 itens", "Somente primeira compra". */
+  rules: string[];
+  /** Primeira regra com valor de desconto ("R$10,00 OFF", "10% OFF"), se houver. */
+  off: string | null;
+  firstPurchase: boolean;
+}
+
+/** Cupons que a própria INK mostra no produto (frame product_promotions). */
+export function parseProductPromotions(root: ParentNode): NativeCoupon[] {
+  const frame = (root.querySelector('#product_promotions_frame') as ParentNode | null) ?? root;
+  const out: NativeCoupon[] = [];
+  frame.querySelectorAll<HTMLInputElement>('[data-controller~="ink-store--clipboard"] input[type="hidden"]').forEach((input) => {
+    const code = (input.getAttribute('value') ?? '').trim();
+    const card = input.closest('div.border') ?? input.parentElement?.parentElement?.parentElement;
+    if (!/^[A-Za-z0-9_-]{2,40}$/.test(code) || !card || out.some((c) => c.code === code)) return;
+    const savings = [...card.querySelectorAll(':scope > span')].map((e) => text(e)).find((t) => /economiza/i.test(t)) ?? '';
+    const rules: string[] = [];
+    card.querySelectorAll(':scope > ul > li').forEach((li) => {
+      const own = [...li.childNodes].filter((n) => !(n.nodeType === 1 && (n as Element).tagName === 'UL')).map((n) => n.textContent ?? '').join(' ').replace(/\s+/g, ' ').trim();
+      if (own) rules.push(own);
+      li.querySelectorAll(':scope > ul > li').forEach((sub) => rules.push(text(sub)));
+    });
+    out.push({ code, savings, rules, off: rules.find((r) => /OFF/i.test(r))?.replace(/^.*?(R\$\s?[\d.,]+|\d+%)\s*OFF.*$/i, '$1 OFF') ?? null, firstPurchase: /primeira compra/i.test(text(card)) });
+  });
+  return out;
+}
+
 export function readCart(root: ParentNode, basePath: string): CartState | null {
   const frame = root.querySelector('.cart-drawer turbo-frame#cart') ?? root.querySelector('turbo-frame#cart');
   if (!frame) return null;

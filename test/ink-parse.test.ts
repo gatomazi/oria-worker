@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM, VirtualConsole } from 'jsdom';
-import { parseBrl, parseMostSolds, parseProductCards, parseProductPage, parseReviewImage, parseReviews, parseStoreSections, readCart } from '../src/shared/ink-parse.ts';
+import { parseBrl, parseMostSolds, parseProductCards, parseProductPage, parseProductPromotions, parseReviewImage, parseReviews, parseStoreSections, readCart } from '../src/shared/ink-parse.ts';
 import { cartFrame } from '../src/platform/replay-origin.ts';
 import { fixture } from './dom-harness.ts';
 
@@ -39,6 +39,17 @@ test('avaliações: depoimentos, fotos e detalhe da foto (marcação real da INK
   const d = parseReviewImage(doc(fixture('review-image-ink-anonimizado.turbo-stream.html')));
   assert.match(d?.author ?? '', /^Cliente \d+\.$/);
   assert.deepEqual(d?.products, ['Produto exemplo', 'Produto exemplo', 'Produto exemplo']);
+});
+
+test('cupons nativos da INK no produto (frame product_promotions): código, regras, faixas e 1ª compra', () => {
+  const cs = parseProductPromotions(doc(fixture('pdp-frame-product-promotions-com-cupons.html')));
+  assert.deepEqual(cs.map((c) => c.code), ['LEVEMAISEXEMPLO', 'PRIMEIRAEXEMPLO']);
+  assert.deepEqual(cs[0]!.rules, ['Promoção progressiva', '2 itens - R$20,00 OFF', '3 itens - R$60,00 OFF', 'Mínimo do carrinho: 2 itens']);
+  assert.equal(cs[0]!.savings, 'Você economiza até R$60,00 na compra');
+  assert.equal(cs[0]!.firstPurchase, false);
+  assert.equal(cs[1]!.firstPurchase, true);
+  assert.equal(cs[1]!.off, 'R$10,00 OFF');
+  assert.deepEqual(parseProductPromotions(doc(fixture('pdp-frame-product-promotions.html'))), [], 'Vista: sem cupons nativos');
 });
 
 test('carrinho com item: marcação REAL da INK (Vista, capturada pelo proxy)', () => {

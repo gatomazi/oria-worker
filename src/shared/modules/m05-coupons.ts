@@ -8,7 +8,7 @@ export const coupons: ModuleDef = {
   name: 'Cupons em destaque e em abas',
   summary: 'Campanhas da loja com código para copiar, em destaque único, abas ou lista; selo de 1ª compra perto do preço. Copiar não aplica o desconto.',
   pages: ['home', 'listing', 'product', 'other'],
-  integrations: [],
+  integrations: ['ink.productPromotions (opcional)'],
   fields: [
     {
       key: 'mode',
@@ -27,7 +27,7 @@ export const coupons: ModuleDef = {
       help: 'Cadastre só campanhas que já existem na INK, com o mesmo código e as mesmas regras.',
       itemLabel: 'Campanha',
       titleKey: 'title',
-      min: 1,
+      min: 0,
       max: 8,
       fields: [
         { key: 'title', type: 'text', label: 'Título', max: 60, required: true },
@@ -40,6 +40,12 @@ export const coupons: ModuleDef = {
         { key: 'nearPrice', type: 'toggle', label: 'Mostrar selo perto do preço (cards e página do produto)' },
         { key: 'badge', type: 'text', label: 'Texto do selo', max: 40, showWhen: { key: 'nearPrice', in: [true] }, required: true },
       ],
+    },
+    {
+      key: 'inkCoupons',
+      type: 'toggle',
+      label: 'Mostrar também os cupons cadastrados na INK (página do produto)',
+      help: 'Lê os cupons que a INK já oferece para aquele produto, com o mesmo código e as mesmas regras. Cupom de primeira compra vira selo perto do preço.',
     },
     {
       key: 'position',
@@ -57,6 +63,7 @@ export const coupons: ModuleDef = {
   defaults: {
     mode: 'unico',
     campaigns: [],
+    inkCoupons: false,
     position: 'abaixo-cabecalho',
     pages: ['home', 'listing', 'product'],
     background: 'surface',
@@ -66,6 +73,7 @@ export const coupons: ModuleDef = {
     const errs: FieldError[] = [];
     const cs = list(s.campaigns);
     cs.forEach((c, i) => errs.push(...dateOrder(`campaigns.${i}.`, c.startsAt, c.endsAt)));
+    if (!cs.length && s.inkCoupons !== true) errs.push({ field: 'campaigns', message: 'Cupons: cadastre ao menos uma campanha ou ligue os cupons da INK.' });
     const codes = cs.map((c) => c.code);
     if (new Set(codes).size !== codes.length) errs.push({ field: 'campaigns', message: 'Campanhas: há códigos repetidos.' });
     return errs;
@@ -78,7 +86,7 @@ export const coupons: ModuleDef = {
         errs.push({ field: `campaigns.${i}.endsAt`, message: `Campanha "${c.title}": a vigência já terminou. Ajuste ou remova antes de publicar.` });
       }
     });
-    if (!cs.some((c) => within(c.startsAt, c.endsAt, now) || (typeof c.startsAt === 'string' && Date.parse(c.startsAt) > now))) {
+    if (s.inkCoupons !== true && !cs.some((c) => within(c.startsAt, c.endsAt, now) || (typeof c.startsAt === 'string' && Date.parse(c.startsAt) > now))) {
       errs.push({ field: 'campaigns', message: 'Cupons: não há campanha vigente nem agendada.' });
     }
     return errs;
@@ -86,6 +94,7 @@ export const coupons: ModuleDef = {
   targets: (s) => {
     const t = targetsFrom(s, ['home']);
     // O selo perto do preço aparece em listagens e produto mesmo sem o bloco nessas páginas.
+    if (s.inkCoupons === true) t.pages = [...new Set([...t.pages, 'product'] as const)];
     if (list(s.campaigns).some((c) => c.nearPrice)) t.pages = [...new Set([...t.pages, 'listing', 'product', 'home'] as const)];
     return t;
   },
@@ -94,6 +103,7 @@ export const coupons: ModuleDef = {
       mode: s.mode,
       position: s.position,
       blockPages: s.pages,
+      inkCoupons: s.inkCoupons === true,
       colors: color(ctx, s.background),
       accent: color(ctx, s.accent),
       campaigns: list(s.campaigns)

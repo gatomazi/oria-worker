@@ -18,7 +18,7 @@ const OP = { email: 'gabriel@local.invalid', password: `e2e-${Math.random().toSt
 const VISTA = 'http://vistaentrenos.localhost:8787';
 const DESKTOP = { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' };
 const MOBILE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: 'reduce' };
-const ANALYTICS = /googletagmanager|google-analytics|facebook|segment\.(io|com)|konduto|apis\.google\.com/;
+const ANALYTICS = /googletagmanager|google-analytics|facebook|segment\.(io|com)|konduto|k-analytix|cloudflareinsights|tiktok|pinterest|doubleclick|apis\.google\.com|analytics-bloqueado/;
 
 const results = [];
 // Interruptores do painel: o input fica sob o desenho; clicar no próprio input dispara o mesmo "change".

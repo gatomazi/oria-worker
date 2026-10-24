@@ -224,7 +224,68 @@ test('M06: após adição confirmada pela INK (modal real que SUBSTITUI o elemen
   assert.ok(env.document.querySelector('#modal-wrapper .checkout-btn'), 'finalização nativa continua acessível');
 });
 
+test('M01: sugestões na busca nativa — peças da busca da loja, vazio e erro, Enter segue para a INK', async () => {
+  const env = setup(HOME, '/vistaentrenos', configWith({ header: { instantSearch: true } }));
+  let mode: 'ok' | 'vazio' | 'erro' = 'ok';
+  env.route('/vistaentrenos/products?search_filter=', () =>
+    mode === 'erro' ? new Response('x', { status: 500 }) : new Response(mode === 'ok' ? fixture('search-vo.html') : '<html><body></body></html>', { headers: { 'content-type': 'text/html' } }),
+  );
+  env.run();
+  await env.mountedAfter();
+  const input = env.document.querySelector<HTMLInputElement>('#search_filter')!;
+  const panel = () => env.document.querySelector('[data-pink-search]')!.shadowRoot!.querySelector('.panel')!;
+  const type = async (v: string) => {
+    input.value = v;
+    input.dispatchEvent(new env.window.Event('input'));
+    await env.tick(400);
+  };
+  await type('v');
+  assert.equal((panel() as HTMLElement).hidden, true, 'com 1 letra não busca');
+  await type('vó');
+  const items = [...panel().querySelectorAll('a.item')];
+  assert.ok(items.length > 0 && items.length <= 6);
+  const titles = items.map((a) => a.querySelector('.t')!.textContent);
+  assert.equal(new Set(titles).size, titles.length, 'sem nomes repetidos');
+  assert.ok(items.every((a) => a.getAttribute('href')!.startsWith('/vistaentrenos/product/')));
+  assert.equal(panel().querySelector('a.all')!.getAttribute('href'), '/vistaentrenos/products?search_filter=v%C3%B3');
+  assert.equal(input.getAttribute('aria-expanded'), 'true');
+  mode = 'vazio';
+  await type('xyzw');
+  assert.match(panel().textContent ?? '', /Nada encontrado para “xyzw”/);
+  mode = 'erro';
+  await type('qwer');
+  assert.match(panel().textContent ?? '', /Não deu para buscar agora/);
+  input.dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.equal((panel() as HTMLElement).hidden, true);
+  env.window.PersonalizacoesInk.destroy();
+  assert.equal(env.document.querySelector('[data-pink-search]'), null, 'desligar remove o painel');
+  assert.equal(input.getAttribute('autocomplete'), null, 'campo volta ao original');
+});
+
 // ---------------------------------------------------------------- M07
+
+test('M05: cupons da INK no produto entram no bloco (sem repetir os do painel) e a 1ª compra vira selo', async () => {
+  const cfg = configWith({ coupons: { mode: 'lista', inkCoupons: true, pages: ['product'], campaigns: [coupon({ code: 'LEVEMAISEXEMPLO', title: 'Do painel' })] } });
+  const env = setup(PDP, PDP_PATH, cfg);
+  env.loadFrame('product_promotions_frame', fixture('pdp-frame-product-promotions-com-cupons.html'));
+  env.run();
+  await env.mountedAfter(150);
+  const text = env.shadow('coupons')!.textContent ?? '';
+  assert.match(text, /Do painel/);
+  assert.equal(text.match(/LEVEMAISEXEMPLO/g)?.length, 1, 'código do painel não se repete');
+  assert.match(text, /Primeira compra: R\$10,00 OFF/);
+  assert.match(text, /Regras da loja: R\$10,00 OFF; Somente primeira compra\./);
+  const badge = env.document.querySelector('[data-pink-badge]');
+  assert.equal(badge?.textContent, 'R$10,00 OFF na 1ª compra');
+});
+
+test('M05: só cupons da INK, mas a loja não tem nenhum: nada aparece', async () => {
+  const env = setup(PDP, PDP_PATH, configWith({ coupons: { inkCoupons: true, pages: ['product'], campaigns: [] } }));
+  env.loadFrame('product_promotions_frame', fixture('pdp-frame-product-promotions.html'));
+  env.run();
+  await env.mountedAfter(150);
+  assert.equal(env.host('coupons'), null);
+});
 
 test('M07: fotos de avaliações reais com nota individual; foto abre o depoimento de origem; sem nota geral', async () => {
   const env = setup(HOME, '/vistaentrenos', configWith({ reviews: { selection: 'com-foto', max: 5, pages: ['home'] } }));
@@ -239,6 +300,26 @@ test('M07: fotos de avaliações reais com nota individual; foto abre o depoimen
   const dlg = root.querySelector('dialog')!;
   assert.match(dlg.textContent ?? '', /Cliente \d+\./);
   assert.match(dlg.textContent ?? '', /Produtos comprados: Produto exemplo/);
+});
+
+test('M07: nota mínima tira avaliação baixa da vitrine (padrão 4★); "todas" mostra', async () => {
+  // Página de avaliações real com só as últimas fotos (a 2★ está entre elas).
+  const { JSDOM, VirtualConsole } = await import('jsdom');
+  const page = new JSDOM(fixture('reviews-ink-anonimizado.html'), { virtualConsole: new VirtualConsole() }).window.document;
+  [...page.querySelectorAll('form[action*="/store_review_images/"]')].slice(0, -8).forEach((f) => f.remove());
+  const html = page.documentElement.outerHTML;
+  const count = async (minRating: string) => {
+    const env = setup(HOME, '/vistaentrenos', configWith({ reviews: { selection: 'com-foto', max: 20, pages: ['home'], minRating } }));
+    env.route('/vistaentrenos/reviews', () => new Response(html, { headers: { 'content-type': 'text/html' } }));
+    env.run();
+    await env.mountedAfter(150);
+    const labels = [...env.shadow('reviews')!.querySelectorAll('button.card')].map((c) => c.getAttribute('aria-label'));
+    closeAll();
+    return labels;
+  };
+  const def = await count('4');
+  assert.ok(def.length > 0 && def.every((l) => /nota 5/.test(l ?? '')), 'só 4★ ou mais');
+  assert.ok((await count('1')).some((l) => /nota 2/.test(l ?? '')), 'com "todas", a 2★ aparece');
 });
 
 test('M07: loja sem avaliações publicadas não mostra nada', async () => {

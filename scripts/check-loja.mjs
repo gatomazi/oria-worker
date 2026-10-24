@@ -17,7 +17,7 @@ if (!PASSWORD) {
   console.error('Defina OPERATOR_PASSWORD (senha do operador no painel local).');
   process.exit(2);
 }
-const ANALYTICS = /googletagmanager|google-analytics|facebook|segment\.(io|com)|konduto|apis\.google\.com/;
+const ANALYTICS = /googletagmanager|google-analytics|facebook|segment\.(io|com)|konduto|k-analytix|cloudflareinsights|tiktok|pinterest|doubleclick|apis\.google\.com|analytics-bloqueado/;
 
 let cookie = '';
 async function api(path) {
@@ -79,6 +79,27 @@ try {
       check(`${device} · ${type}: módulos esperados montados`, missing.length === 0 && !(st?.failed ?? []).length, `montados ${JSON.stringify(mounted)}${missing.length ? ` · faltando ${missing.join(', ')}` : ''}${st?.failed?.length ? ` · falhas ${st.failed.join(', ')}` : ''}`);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (device === 'celular') check(`${device} · ${type}: sem rolagem horizontal`, overflow <= 0, `${overflow}px`);
+      if (device === 'celular') {
+        // Botões flutuantes (assistente, mini player) não podem cobrir a barra de compra, o aviso de cookies nem a ajuda da INK.
+        const hits = await page.evaluate(() => {
+          const visible = (el) => el && el.getClientRects().length > 0 && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden';
+          const natives = [['barra de compra', '.form-product-options__add-to-cart-mobile'], ['aviso de cookies', '.cookie-acceptance'], ['ajuda da INK', '[data-controller~="ink-store--help-button"]']]
+            .map(([n, s]) => [n, document.querySelector(s)])
+            .filter(([, el]) => visible(el));
+          const out = [];
+          for (const host of document.querySelectorAll('[data-pink-floating], [data-pink-module="assistant"], [data-pink-module="miniPlayer"]')) {
+            if (!visible(host)) continue;
+            const a = host.getBoundingClientRect();
+            if (!a.width || !a.height) continue;
+            for (const [n, el] of natives) {
+              const b = el.getBoundingClientRect();
+              if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) out.push(`${host.getAttribute('data-pink-module')} × ${n}`);
+            }
+          }
+          return out;
+        });
+        check(`${device} · ${type}: flutuantes não cobrem compra, cookies nem ajuda`, hits.length === 0, hits.join(', '));
+      }
       check(`${device} · ${type}: sem erros dos módulos`, errors.length === 0, errors.slice(0, 2).join(' | '));
       if (fetches.length) console.log(`      leituras de páginas da loja pelos módulos: ${fetches.length} (${[...new Set(fetches)].join(', ')})`);
       await page.close();

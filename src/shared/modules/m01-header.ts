@@ -55,6 +55,7 @@ export const header: ModuleDef = {
       ],
     },
     { key: 'searchPlaceholder', type: 'text', label: 'Texto dentro da busca', max: 60 },
+    { key: 'instantSearch', type: 'toggle', label: 'Sugestões enquanto a pessoa digita', help: 'Mostra até 6 peças da busca da própria loja, com foto e preço. Enter continua indo para a busca da INK.' },
     {
       key: 'benefits',
       type: 'select',
@@ -74,6 +75,7 @@ export const header: ModuleDef = {
     menu: [],
     searchMode: 'icone',
     searchPlaceholder: 'Buscar produtos',
+    instantSearch: false,
     benefits: 'manter',
     devices: ['mobile', 'desktop'],
   },
@@ -92,6 +94,7 @@ export const header: ModuleDef = {
       menu: list(s.menu).map((m) => ({ label: m.label, path: m.path, group: m.group })),
       searchMode: s.searchMode,
       searchPlaceholder: s.searchPlaceholder,
+      instantSearch: s.instantSearch === true,
       benefits: s.benefits,
     };
   },

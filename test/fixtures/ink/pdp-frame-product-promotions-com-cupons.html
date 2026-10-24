@@ -1,0 +1,54 @@
+<!-- Estrutura nativa do frame product_promotions da INK (layout clássico), reduzida à mão. Códigos e valores fictícios. -->
+<html><body>
+<turbo-frame id="product_promotions_frame">
+  <div class="items-center border border-gray-300 p-4 rounded-lg">
+    <div class="flex gap-2 mb-1"><span class="text-base font-medium leading-6 text-gray-900 mr-2">Cupom</span>
+      <a data-modal-target="product-promotions-modal" data-modal-toggle="product-promotions-modal" class="text-blue-600 font-normal underline">Ver cupons disponíveis</a></div>
+    <span class="text-base leading-relaxed text-gray-500">2 cupons disponíveis para esse produto</span>
+  </div>
+  <div id="product-promotions-modal" tabindex="-1" aria-hidden="true" class="hidden fixed top-0 right-0 left-0 z-50">
+    <div class="relative py-8 px-5 bg-white rounded-lg shadow">
+      <div class="flex items-center justify-between rounded-t mb-2"><h3 class="text-xl font-semibold text-gray-900"> Cupons </h3>
+        <button type="button" data-modal-hide="product-promotions-modal"><span class="sr-only">Close modal</span></button></div>
+      <div class="space-y-4 gap-6">
+        <p class="text-base leading-relaxed text-gray-500"> Cupons disponíveis para esse produto. Você pode apenas aplicar um cupom por compra. </p>
+        <div class="space-y-4 gap-6 max-h-[60vh] overflow-y-auto pb-1 no-scrollbar">
+          <div class="items-center border border-gray-300 p-4 rounded-lg">
+            <div class="flex justify-between">
+              <span class="flex gap-1 items-center justify-end bg-green-100 text-green-800 text-md font-medium me-2 mb-2 px-2.5 py-0.5 rounded"> <span class=""></span> LEVEMAISEXEMPLO </span>
+              <div data-controller="ink-store--clipboard" class="flex flex-row justify-between" data-ink-store--clipboard-text-value="Copiado!">
+                <input data-ink-store--clipboard-target="input" type="hidden" value="LEVEMAISEXEMPLO">
+                <button type="button" class="text-sm text-gray-500 text-normal" data-action="ink-store--clipboard#copy"></button>
+              </div>
+            </div>
+            <span class="text-base leading-relaxed text-gray-600"> Você economiza até <span class="text-green-600">R$60,00</span> na compra </span>
+            <ul class="list-disc pl-5 text-base leading-relaxed text-gray-900 my-1">
+              <li> Promoção progressiva
+                <ul class="list-disc pl-5 text-base leading-relaxed text-gray-900">
+                  <li> 2 itens - <span class="font-medium"> R$20,00 OFF </span> </li>
+                  <li> 3 itens - <span class="font-medium"> R$60,00 OFF </span> </li>
+                </ul>
+              </li>
+              <li> Mínimo do carrinho: <span class="font-medium">2 itens</span> </li>
+            </ul>
+          </div>
+          <div class="items-center border border-gray-300 p-4 rounded-lg">
+            <div class="flex justify-between">
+              <span class="flex gap-1 items-center justify-end bg-green-100 text-green-800 text-md font-medium me-2 mb-2 px-2.5 py-0.5 rounded"> <span class=""></span> PRIMEIRAEXEMPLO </span>
+              <div data-controller="ink-store--clipboard" class="flex flex-row justify-between" data-ink-store--clipboard-text-value="Copiado!">
+                <input data-ink-store--clipboard-target="input" type="hidden" value="PRIMEIRAEXEMPLO">
+                <button type="button" class="text-sm text-gray-500 text-normal" data-action="ink-store--clipboard#copy"></button>
+              </div>
+            </div>
+            <span class="text-base leading-relaxed text-gray-600"> Você economiza <span class="text-green-600">R$10,00</span> na compra </span>
+            <ul class="list-disc pl-5 text-base leading-relaxed text-gray-900 my-1">
+              <li> R$10,00 OFF </li>
+              <li>Somente primeira compra</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</turbo-frame>
+</body></html>

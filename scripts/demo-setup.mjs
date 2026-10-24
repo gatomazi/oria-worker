@@ -133,6 +133,7 @@ if (process.argv.includes('--vista')) {
     });
   }
   await configure('vista-entre-nos', (d) => {
+    on(d, 'header', { searchMode: 'barra', instantSearch: true, searchPlaceholder: 'Busque por estampa ou tema' });
     on(d, 'categoryTabs', { title: 'Escolha por laço', tabs: [
       { label: 'Mães', path: `${BASE}/collections/maes` },
       { label: 'Pais', path: `${BASE}/collections/pais` },

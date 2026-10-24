@@ -3,6 +3,7 @@
 // alterado entra numa pilha de desfazer; ao desligar, a página volta ao original.
 import { h, safeHref, Undo } from '../runtime/dom.ts';
 import type { ClientModule, ModuleContext } from '../runtime/types.ts';
+import { attachSearchSuggest } from './search-suggest.ts';
 
 interface MenuItem {
   label: string;
@@ -24,6 +25,7 @@ const headerModule: ClientModule = {
       menu: MenuItem[];
       searchMode: string;
       searchPlaceholder: string;
+      instantSearch?: boolean;
       benefits: string;
     };
     const header = document.querySelector<HTMLElement>('header.header');
@@ -66,9 +68,11 @@ const headerModule: ClientModule = {
         `#search_filter_mobile{opacity:1!important;height:44px!important;margin:6px 0 10px!important;pointer-events:auto!important}`,
       );
     }
-    for (const input of header.querySelectorAll<HTMLInputElement>('input[name="search_filter"]')) {
+    const searchInputs = [...header.querySelectorAll<HTMLInputElement>('input[name="search_filter"]')];
+    for (const input of searchInputs) {
       if (s.searchPlaceholder) undo.attr(input, 'placeholder', s.searchPlaceholder);
     }
+    if (s.instantSearch && searchInputs.length) attachSearchSuggest(ctx, searchInputs, undo);
     // Logo da identidade (se definido).
     if (s.logoUrl && safeHref(s.logoUrl).startsWith('https://')) {
       for (const img of header.querySelectorAll<HTMLImageElement>('a.brand img')) undo.attr(img, 'src', safeHref(s.logoUrl));
