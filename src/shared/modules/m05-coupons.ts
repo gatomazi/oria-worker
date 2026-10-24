@@ -37,10 +37,21 @@ export const coupons: ModuleDef = {
         { key: 'startsAt', type: 'datetime', label: 'Início (opcional)' },
         { key: 'endsAt', type: 'datetime', label: 'Fim (opcional)' },
         { key: 'firstPurchase', type: 'toggle', label: 'Só para a primeira compra' },
-        { key: 'nearPrice', type: 'toggle', label: 'Mostrar selo perto do preço (cards e página do produto)' },
+        { key: 'nearPrice', type: 'toggle', label: 'Mostrar selo perto do preço nos cards de produto' },
         { key: 'badge', type: 'text', label: 'Texto do selo', max: 40, showWhen: { key: 'nearPrice', in: [true] }, required: true },
       ],
     },
+    {
+      key: 'productStyle',
+      type: 'select',
+      label: 'Na página do produto',
+      help: 'Abas: um quadro compacto logo abaixo do preço, uma aba por código, com todas as campanhas vigentes (o selo de 1ª compra já aparece nelas). Bloco: o mesmo das outras páginas, com o selo junto ao preço.',
+      options: [
+        { value: 'junto-preco', label: 'Abas junto ao preço (uma por código)' },
+        { value: 'bloco', label: 'Mesmo bloco das outras páginas' },
+      ],
+    },
+    { key: 'productTitle', type: 'text', label: 'Título das abas no produto', max: 40, showWhen: { key: 'productStyle', in: ['junto-preco'] } },
     {
       key: 'inkCoupons',
       type: 'toggle',
@@ -63,6 +74,8 @@ export const coupons: ModuleDef = {
   defaults: {
     mode: 'unico',
     campaigns: [],
+    productStyle: 'junto-preco',
+    productTitle: 'Cupons para este produto',
     inkCoupons: false,
     position: 'abaixo-cabecalho',
     pages: ['home', 'listing', 'product'],
@@ -104,6 +117,8 @@ export const coupons: ModuleDef = {
       position: s.position,
       blockPages: s.pages,
       inkCoupons: s.inkCoupons === true,
+      productStyle: s.productStyle,
+      productTitle: s.productTitle,
       colors: color(ctx, s.background),
       accent: color(ctx, s.accent),
       campaigns: list(s.campaigns)

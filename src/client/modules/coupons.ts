@@ -84,6 +84,8 @@ const couponsModule: ClientModule = {
       accent: { bg: string; fg: string };
       campaigns: Campaign[];
       inkCoupons?: boolean;
+      productStyle?: string;
+      productTitle?: string;
     };
     const { signal } = ctx;
     const now = Date.now();
@@ -94,8 +96,22 @@ const couponsModule: ClientModule = {
     const render = (live: Campaign[]): (() => void) => {
       const undo = new Undo();
 
+      // Produto: abas compactas junto ao preço (uma por código), no lugar do bloco.
+      let compact = false;
+      if (ctx.page === 'product' && s.productStyle !== 'bloco' && (s.blockPages.includes('product') || s.inkCoupons)) {
+        const spot = belowPrice();
+        if (spot) {
+          const host = productTabs(live, s.productTitle ?? '', ctx, s.accent, timers);
+          undo.insert(host, spot.parent, spot.before);
+          compact = true;
+          // Os cupons da INK já estão nas abas: o quadro nativo sairia repetido.
+          const native = document.querySelector<HTMLElement>('#product_promotions_frame');
+          if (native && live.some((c) => c.fromInk)) undo.hide(native);
+        }
+      }
+
       // Bloco principal
-      if (s.blockPages.includes(ctx.page)) {
+      if (s.blockPages.includes(ctx.page) && !compact) {
         const spot = s.position === 'antes-rodape' ? beforeFooter() : afterHeader();
         if (spot) {
           const { host, root } = shadowHost('coupons', ctx.theme, CSS);
@@ -169,9 +185,16 @@ const couponsModule: ClientModule = {
         };
         if (badge) document.querySelectorAll('.card-thumb .card-thumb__prices-v2').forEach((price) => {
           const b = mk(badge);
+          // Cards estreitos (vitrines no celular): quebra a linha em vez de cortar o texto.
+          b.style.whiteSpace = 'normal';
+          b.style.width = 'auto';
+          b.style.fontSize = '11.5px';
+          b.style.lineHeight = '1.3';
+          b.style.textAlign = 'center';
+          b.style.overflowWrap = 'anywhere';
           undo.insert(b, price.parentNode!, price.nextSibling);
         });
-        if (ctx.page === 'product' && productBadge) {
+        if (ctx.page === 'product' && productBadge && !compact) {
           const spot = belowPrice();
           if (spot) {
             const b = mk(productBadge);
@@ -210,6 +233,147 @@ const couponsModule: ClientModule = {
     };
   },
 };
+
+const TABS_CSS = `
+:host{display:block;margin:14px 0 4px;max-width:460px;container-type:inline-size}
+.ttl{margin:0 0 8px;font-size:16px;font-weight:600;line-height:1.4}
+.tabs{display:flex;gap:6px;margin-bottom:-1px;overflow-x:auto;scrollbar-width:none;position:relative;z-index:1}
+.tabs::-webkit-scrollbar{display:none}
+.tabs[data-more]{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.tab{flex:1 0 auto;min-width:0;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:0 12px;border:1px solid var(--line);border-radius:10px 10px 0 0;background:#fff;color:color-mix(in srgb,var(--ac) 72%,#fff);font:600 13.5px/1 inherit;letter-spacing:.02em;white-space:nowrap;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--tint);border-bottom-color:var(--tint);color:var(--ac);cursor:default}
+.tab:focus-visible{outline:2px solid var(--ac);outline-offset:-3px}
+.tab svg{flex:none;width:14px;height:14px;fill:currentColor}
+span.tab{cursor:default;flex:0 0 auto}
+.panel{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border:1px solid var(--line);border-radius:0 10px 10px 10px;background:var(--tint)}
+.panel[hidden]{display:none}
+.txt{min-width:0;color:var(--ink)}
+.main{margin:0;font-weight:600;font-size:14.5px;line-height:1.35}
+.sub{margin:2px 0 0;font-size:13.5px;line-height:1.35}
+.meta{margin:4px 0 0;font-size:12.5px;opacity:.8}
+details{margin-top:4px;font-size:12.5px}
+summary{cursor:pointer;text-decoration:underline;text-underline-offset:2px;width:max-content}
+details p{margin:4px 0 0;white-space:pre-line}
+.acts{flex:none;display:flex;flex-direction:column;align-items:stretch;gap:6px}
+.copy{min-height:40px;padding:8px 18px;border:0;border-radius:999px;background:var(--ac);color:var(--on-ac);font-weight:700;font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+.copy[data-done]{background:color-mix(in srgb,var(--ac) 80%,#000)}
+.use{min-height:32px;padding:4px 8px;border:0;background:transparent;color:var(--ac);font-weight:600;font-size:12.5px;text-decoration:underline;cursor:pointer}
+.status{margin:6px 2px 0;font-size:13px;color:var(--ink)}
+.status:empty{display:none}
+@container (max-width:420px){.tabs{gap:4px}.tab{padding:0 8px;font-size:12.5px;gap:4px}.tab svg{width:12px;height:12px}}
+@container (max-width:380px){.panel{flex-direction:column;align-items:stretch}.acts{flex-direction:row}.copy{flex:1}}
+`;
+const TAG_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h4.09a1.5 1.5 0 0 1 1.06.44l7 7a1.5 1.5 0 0 1 0 2.12l-4.09 4.09a1.5 1.5 0 0 1-2.12 0l-7-7A1.5 1.5 0 0 1 1 6.59V2.5Zm3.5 3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>';
+
+/** Quadro compacto do produto: uma aba por código, texto curto e "Copiar". */
+function productTabs(live: Campaign[], title: string, ctx: ModuleContext, accent: { bg: string; fg: string }, timers: Set<ReturnType<typeof setTimeout>>): HTMLElement {
+  const { signal } = ctx;
+  const { host, root } = shadowHost('coupons', ctx.theme, TABS_CSS, { 'data-pink-coupon-tabs': '' });
+  root.append(h('style', {}, `:host{--ac:${accent.bg};--on-ac:${accent.fg};--tint:color-mix(in srgb,${accent.bg} 7%,#fff);--line:color-mix(in srgb,${accent.bg} 28%,#fff);--ink:color-mix(in srgb,${accent.bg} 70%,#111)}`));
+  const status = h('p', { class: 'status', role: 'status', 'aria-live': 'polite' });
+  const multi = live.length > 1;
+  const icon = () => {
+    const t = document.createElement('template');
+    t.innerHTML = TAG_ICON;
+    return t.content.firstChild!;
+  };
+  const tabs = live.map((c, i) => {
+    const attrs = multi
+      ? { class: 'tab', type: 'button', role: 'tab', id: `pk-ct-${i}`, 'aria-controls': `pk-cp-${i}`, 'aria-selected': i === 0 ? 'true' : 'false', tabindex: i === 0 ? '0' : '-1' }
+      : { class: 'tab', 'aria-selected': 'true' };
+    const el = h(multi ? 'button' : 'span', attrs, icon(), h('span', {}, c.code));
+    return el;
+  });
+  const panels = live.map((c, i) => {
+    const copy = h('button', { class: 'copy', type: 'button', 'aria-label': `Copiar o código ${c.code}` }, 'Copiar');
+    const use = h('button', { class: 'use', type: 'button' }, 'Usar no carrinho');
+    use.hidden = !cartCouponInput();
+    let reset: ReturnType<typeof setTimeout> | undefined;
+    copy.addEventListener('click', async () => {
+      const ok = await copyText(c.code, root);
+      if (signal.aborted) return;
+      clearTimeout(reset);
+      if (ok) {
+        status.textContent = MESSAGES.copied;
+        copy.textContent = 'Copiado';
+        copy.setAttribute('data-done', '');
+        reset = setTimeout(() => {
+          copy.textContent = 'Copiar';
+          copy.removeAttribute('data-done');
+        }, 2500);
+        timers.add(reset);
+      } else {
+        status.textContent = `${MESSAGES.copyFailed} Código: ${c.code}`;
+      }
+    }, { signal });
+    use.addEventListener('click', () => {
+      // Só preenche o campo da INK; quem valida e aplica é a loja.
+      const input = cartCouponInput();
+      if (!input) {
+        status.textContent = MESSAGES.noCartField;
+        return;
+      }
+      [...document.querySelectorAll<HTMLElement>('[id^="shopping-cart-menu"]')].find((b) => b.getClientRects().length)?.click();
+      input.value = c.code;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      setTimeout(() => input.focus(), 250);
+      status.textContent = MESSAGES.filled;
+    }, { signal });
+    const meta = [c.firstPurchase ? 'Só na primeira compra' : '', c.endsAt ? `Válido até ${formatWhen(c.endsAt)}` : ''].filter(Boolean).join(' · ');
+    return h(
+      'div',
+      { class: 'panel', ...(multi ? { role: 'tabpanel', id: `pk-cp-${i}`, 'aria-labelledby': `pk-ct-${i}` } : {}), hidden: i === 0 ? undefined : '' },
+      h('div', { class: 'txt' },
+        h('p', { class: 'main' }, c.title),
+        c.description ? h('p', { class: 'sub' }, c.description) : null,
+        meta ? h('p', { class: 'meta' }, meta) : null,
+        c.conditions ? h('details', {}, h('summary', {}, 'Condições'), h('p', {}, c.conditions)) : null,
+      ),
+      h('div', { class: 'acts' }, copy, use),
+    );
+  });
+  if (multi) {
+    const select = (i: number, focus = false) => {
+      tabs.forEach((t, j) => {
+        t.setAttribute('aria-selected', String(i === j));
+        (t as HTMLElement).tabIndex = i === j ? 0 : -1;
+        panels[j]!.hidden = i !== j;
+      });
+      status.textContent = '';
+      if (focus) (tabs[i] as HTMLElement).focus();
+      (tabs[i] as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(i), { signal });
+      t.addEventListener('keydown', (e) => {
+        const k = (e as KeyboardEvent).key;
+        if (k === 'ArrowRight' || k === 'ArrowLeft') {
+          e.preventDefault();
+          select((i + (k === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length, true);
+        }
+      }, { signal });
+    });
+  }
+  ctx.cart.onChange(() => {
+    const has = !!cartCouponInput();
+    root.querySelectorAll<HTMLButtonElement>('.use').forEach((b) => (b.hidden = !has));
+  }, signal);
+  // Abas que não cabem: rolagem lateral com esmaecido na borda enquanto houver mais à direita.
+  const strip = h('div', { class: 'tabs', ...(multi ? { role: 'tablist', 'aria-label': 'Cupons' } : {}) }, ...tabs);
+  const more = () => strip.toggleAttribute('data-more', strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 2);
+  strip.addEventListener('scroll', more, { signal, passive: true });
+  window.addEventListener('resize', more, { signal, passive: true });
+  requestAnimationFrame(more);
+  root.append(
+    h('section', { 'aria-label': title || 'Cupons' },
+      title ? h('p', { class: 'ttl' }, title) : null,
+      strip,
+      ...panels,
+      status,
+    ),
+  );
+  return host;
+}
 
 /** Cupons do frame nativo product_promotions. O frame é "lazy" (só carrega ao rolar): lê o endereço dele direto. */
 async function loadInkCoupons(signal: AbortSignal): Promise<Campaign[]> {

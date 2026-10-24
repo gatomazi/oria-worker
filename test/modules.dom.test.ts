@@ -131,10 +131,11 @@ test('M04: WhatsApp com mensagem e link limpo; copiar link', async () => {
 
 // ---------------------------------------------------------------- M05
 
-test('M05: abas de campanhas, selo de 1ª compra perto do preço, copiar ≠ aplicar', async () => {
+test('M05 (produto em "bloco"): abas de campanhas, selo de 1ª compra perto do preço, copiar ≠ aplicar', async () => {
   const cfg = configWith({
     coupons: {
       mode: 'abas',
+      productStyle: 'bloco',
       pages: ['product'],
       campaigns: [coupon({ code: 'PRIMEIRA10', nearPrice: true, badge: '10% na 1ª compra' }), coupon({ title: 'Frete', code: 'FRETE', firstPurchase: false }), coupon({ title: 'Vencido', code: 'VELHO', endsAt: '2099-01-01T00:00:00-03:00', startsAt: '2098-01-01T00:00:00-03:00' })],
     },
@@ -154,6 +155,58 @@ test('M05: abas de campanhas, selo de 1ª compra perto do preço, copiar ≠ apl
   assert.deepEqual(writes, ['PRIMEIRA10']);
   assert.match(root.textContent ?? '', /Código copiado/);
   assert.doesNotMatch(root.textContent ?? '', /aplicad/i);
+});
+
+test('M05: no produto, abas compactas logo abaixo do preço — uma por código, teclado, copiar', async () => {
+  const cfg = configWith({
+    coupons: {
+      mode: 'unico',
+      pages: ['home', 'product'],
+      productTitle: 'Quer cupom? Toma!',
+      campaigns: [
+        coupon({ title: 'Leve 2, ganhe 10%', description: 'Na compra de duas peças', code: 'DOSE10' }),
+        coupon({ title: '10% na primeira compra', code: 'PRIMEIRA10', firstPurchase: true, nearPrice: true, badge: '10% na 1ª compra' }),
+        coupon({ title: 'Futuro', code: 'FUTURO', startsAt: '2098-01-01T00:00:00-03:00', endsAt: '2099-01-01T00:00:00-03:00' }),
+      ],
+    },
+  });
+  const env = setup(PDP, PDP_PATH, cfg);
+  const writes: string[] = [];
+  Object.defineProperty(env.window.navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void writes.push(t) } });
+  env.run();
+  await env.mountedAfter();
+  const host = env.document.querySelector('[data-pink-coupon-tabs]')!;
+  assert.ok(host, 'abas no produto');
+  assert.equal(env.document.querySelectorAll('[data-pink-module="coupons"]:not([data-pink-badge])').length, 1, 'sem o bloco grande no produto');
+  assert.ok(host.closest('form[id^="form-product-"]'), 'dentro da área de compra');
+  assert.ok(host.previousElementSibling?.querySelector('p.text-4xl') || host.previousElementSibling?.matches('p.text-4xl'), 'logo abaixo do preço');
+  assert.equal(env.document.querySelector('form[id^="form-product-"] [data-pink-badge]'), null, 'sem selo repetido no produto: as abas já estão junto ao preço');
+  const root = host.shadowRoot!;
+  assert.match(root.textContent ?? '', /Quer cupom\? Toma!/);
+  const tabs = [...root.querySelectorAll<HTMLElement>('[role="tab"]')];
+  assert.deepEqual(tabs.map((t) => t.textContent), ['DOSE10', 'PRIMEIRA10'], 'uma aba por código vigente, mesmo no modo "único"');
+  const panels = [...root.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+  assert.deepEqual(panels.map((p) => p.hidden), [false, true]);
+  tabs[0]!.dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  assert.deepEqual(panels.map((p) => p.hidden), [true, false]);
+  assert.equal(tabs[1]!.getAttribute('aria-selected'), 'true');
+  assert.match(panels[1]!.textContent ?? '', /10% na primeira compra.*Só na primeira compra/);
+  panels[1]!.querySelector<HTMLElement>('.copy')!.click();
+  await env.tick(10);
+  assert.deepEqual(writes, ['PRIMEIRA10']);
+  assert.equal(panels[1]!.querySelector('.copy')!.textContent, 'Copiado');
+  assert.match(root.textContent ?? '', /Código copiado/);
+  assert.doesNotMatch(root.textContent ?? '', /aplicad/i);
+});
+
+test('M05: no produto, um cupom só vira um rótulo com o código (sem abas)', async () => {
+  const env = setup(PDP, PDP_PATH, configWith({ coupons: { pages: ['product'], campaigns: [coupon({ code: 'UNICO10' })] } }));
+  env.run();
+  await env.mountedAfter();
+  const root = env.document.querySelector('[data-pink-coupon-tabs]')!.shadowRoot!;
+  assert.equal(root.querySelectorAll('[role="tab"]').length, 0);
+  assert.equal(root.querySelector('span.tab')!.textContent, 'UNICO10');
+  assert.equal(root.querySelectorAll('.panel').length, 1);
 });
 
 test('M05: "Usar no carrinho" só preenche o campo de cupom da INK, sem enviar', async () => {
@@ -264,7 +317,7 @@ test('M01: sugestões na busca nativa — peças da busca da loja, vazio e erro,
 
 // ---------------------------------------------------------------- M07
 
-test('M05: cupons da INK (frame lazy, ainda não carregado): painel aparece na hora, os da INK chegam depois, sem repetir código; selo da INK só no produto principal', async () => {
+test('M05: cupons da INK (frame lazy, ainda não carregado): painel aparece na hora, os da INK chegam depois nas abas, sem repetir código; quadro nativo some', async () => {
   const cfg = configWith({ coupons: { mode: 'lista', inkCoupons: true, pages: ['product'], campaigns: [coupon({ code: 'LEVEMAISEXEMPLO', title: 'Do painel' })] } });
   const env = setup(PDP, PDP_PATH, cfg);
   // Um card de outro produto na página (vitrine de recomendações).
@@ -284,16 +337,17 @@ test('M05: cupons da INK (frame lazy, ainda não carregado): painel aparece na h
   assert.doesNotMatch(env.shadow('coupons')!.textContent ?? '', /PRIMEIRAEXEMPLO/);
   release();
   await env.tick(150);
-  const text = env.shadow('coupons')!.textContent ?? '';
+  const root = env.shadow('coupons')!;
+  const text = root.textContent ?? '';
   assert.match(text, /Do painel/);
-  assert.equal(text.match(/LEVEMAISEXEMPLO/g)?.length, 1, 'código do painel não se repete');
+  assert.deepEqual([...root.querySelectorAll('[role="tab"]')].map((t) => t.textContent), ['LEVEMAISEXEMPLO', 'PRIMEIRAEXEMPLO'], 'código do painel não se repete');
   assert.match(text, /Primeira compra: R\$10,00 OFF/);
   assert.match(text, /Regras da loja: R\$10,00 OFF; Somente primeira compra\./);
-  const badges = [...env.document.querySelectorAll('[data-pink-badge]')];
-  assert.equal(badges.length, 1, 'selo só no preço do produto principal, não no card de outro produto');
-  assert.equal(badges[0]!.textContent, 'R$10,00 OFF na 1ª compra');
-  assert.equal(badges[0]!.closest('.card-thumb'), null);
-  assert.equal(env.document.querySelectorAll('[data-pink-module="coupons"]:not([data-pink-badge])').length, 1, 'um bloco só');
+  assert.equal(env.document.querySelectorAll('[data-pink-badge]').length, 0, 'nenhum selo: nem no card de outro produto, nem repetido junto às abas');
+  assert.equal(frame.getAttribute('style')?.includes('display: none') || (frame as HTMLElement).style.display === 'none', true, 'quadro nativo da INK escondido (já está nas abas)');
+  assert.equal(env.document.querySelectorAll('[data-pink-module="coupons"]:not([data-pink-badge])').length, 1, 'um quadro só');
+  env.window.PersonalizacoesInk.destroy();
+  assert.notEqual((frame as HTMLElement).style.display, 'none', 'desligar devolve o quadro nativo');
 });
 
 test('M05: só cupons da INK, mas a loja não tem nenhum: nada aparece', async () => {

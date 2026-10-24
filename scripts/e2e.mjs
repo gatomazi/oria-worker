@@ -148,7 +148,7 @@ try {
   await camp.getByLabel('Título').fill('10% na primeira compra');
   await camp.getByLabel('Código do cupom').fill('entrenos10');
   await camp.getByLabel('Condições de uso').fill('Teste local: cupom de demonstração; confirme o código real na INK antes de divulgar.');
-  await setSwitch(camp.getByLabel('Mostrar selo perto do preço (cards e página do produto)'), true);
+  await setSwitch(camp.getByLabel('Mostrar selo perto do preço nos cards de produto'), true);
   await camp.getByLabel('Texto do selo').fill('10% na 1ª compra');
   await frame.locator('[data-pink-module="coupons"]:not([data-pink-badge])').waitFor({ state: 'attached', timeout: 30000 }).catch(async (err) => {
     const fr = ed.frames().find((f) => f !== ed.mainFrame());
@@ -203,8 +203,13 @@ try {
   await store.waitForTimeout(3500);
   const pdpState = await store.evaluate(() => window.PersonalizacoesInk.state());
   check('Loja real: M03, M05 e M12 no produto', ['gallery', 'coupons', 'delivery'].every((m) => pdpState.mounted.includes(m)), JSON.stringify(pdpState.mounted));
-  const badge = await store.evaluate(() => document.querySelector('form[id^="form-product-"] [data-pink-badge]')?.textContent ?? '');
-  check('Loja real: selo de 1ª compra perto do preço', badge === '10% na 1ª compra', badge);
+  const tabsNearPrice = await store.evaluate(() => {
+    const host = document.querySelector('form[id^="form-product-"] [data-pink-coupon-tabs]');
+    return host ? host.shadowRoot.querySelector('.tab')?.textContent + ' · ' + host.shadowRoot.querySelector('.main')?.textContent : '';
+  });
+  check('Loja real: cupom em abas logo abaixo do preço', /ENTRENOS10/i.test(tabsNearPrice) && /primeira compra/i.test(tabsNearPrice), tabsNearPrice);
+  const cardBadge = await store.evaluate(() => document.querySelector('.card-thumb [data-pink-badge]')?.textContent ?? '');
+  check('Loja real: selo de 1ª compra nos cards de produto', cardBadge === '10% na 1ª compra', cardBadge || '(sem cards na página)');
   const thumbs = await store.evaluate(() => document.querySelector('[data-pink-module="gallery"]')?.shadowRoot?.querySelectorAll('button').length ?? 0);
   check('Loja real: miniaturas das fotos do produto', thumbs > 1, `${thumbs} miniaturas`);
   // M12 com o formulário de CEP da própria INK (GET)
