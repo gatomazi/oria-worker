@@ -13,8 +13,6 @@ export interface InstallContext {
   publicPort: number;
   stores: StoreService;
   auth: Auth;
-  /** Há credencial de IA configurada no servidor? */
-  aiConfigured: boolean;
   /** Para testes: busca HTTP injetável. */
   probe?: (url: string, host: string) => Promise<{ status: number; body: string }>;
 }
@@ -82,9 +80,6 @@ export async function installStatus(store: Store, view: StoreView, ctx: InstallC
 
   // Integrações de que os módulos ligados dependem.
   const deps = new Set(enabled.flatMap((id) => moduleDef(id)?.integrations ?? []));
-  if (deps.has('assistant.ai (opcional)')) {
-    add('ia', 'Assistente com IA', store.integration.chatAi && ctx.aiConfigured ? 'ok' : 'warn', store.integration.chatAi ? (ctx.aiConfigured ? 'Credencial configurada no servidor.' : 'IA ligada para a loja, mas falta ANTHROPIC_API_KEY no servidor: o assistente usa só a base de respostas.') : 'Usando só a base de respostas (IA desligada).');
-  }
   if (deps.has('ink.cart')) {
     add('carrinho', 'Leitura do carrinho', 'ok', store.integration.proxyCart ? 'Proxy local libera adicionar/alterar itens (sem checkout) para testes.' : 'Leitura do carrinho renderizado pela INK. No proxy local, adicionar itens está bloqueado.');
   }

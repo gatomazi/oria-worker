@@ -34,7 +34,7 @@ const stores = new StoreService(db);
 seed(stores);
 const media = new MediaStore(db, DATA_DIR);
 const catalog = new CatalogReader();
-const assistant = new AssistantService({ stores, catalog, db, secret, apiKey: process.env.ANTHROPIC_API_KEY || undefined });
+const assistant = new AssistantService({ stores, catalog, db, secret });
 const storeUrl = (s: { devHost: string; basePath: string }) => `http://${s.devHost}:${WORKER_PORT}${s.basePath}`;
 
 const servers: Server[] = [];
@@ -46,7 +46,7 @@ const admin = createAdminServer({
   secret,
   port: ADMIN_PORT,
   storeUrl,
-  install: { workerPort: WORKER_PORT, publicPort: PUBLIC_PORT, stores, auth, aiConfigured: assistant.aiConfigured },
+  install: { workerPort: WORKER_PORT, publicPort: PUBLIC_PORT, stores, auth },
 });
 await listen(admin, ADMIN_PORT, 'painel');
 servers.push(admin);
@@ -74,7 +74,6 @@ if (!auth.hasOperator()) {
     console.log(`\n[local] PRIMEIRO ACESSO do operador (${email}): defina a senha em\n        http://${HOST}:${ADMIN_PORT}/#/convite/${token}\n`);
   }
 }
-if (!assistant.aiConfigured) console.log('[local] assistente: sem ANTHROPIC_API_KEY, responde só pela base de respostas da loja.');
 
 function shutdown() {
   for (const s of servers) {

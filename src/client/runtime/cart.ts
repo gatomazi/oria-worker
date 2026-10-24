@@ -13,6 +13,8 @@ export class CartService {
   private observers: MutationObserver[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private lifetime = new AbortController();
+  private watchedAdded: HTMLElement | null = null;
+  private addedObserver: MutationObserver | null = null;
 
   constructor(basePath: string) {
     this.basePath = basePath;
@@ -63,26 +65,35 @@ export class CartService {
       o.observe(drawer, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-quantityheader', 'value'] });
       this.observers.push(o);
     }
-    const added = ink.lastAdded();
-    if (added) {
-      const o = new MutationObserver(() => {
-        const modal = added.querySelector<HTMLElement>('#modal-wrapper, .add-product-modal') ?? (added.children.length ? (added.firstElementChild as HTMLElement) : null);
-        if (modal && /adicionad/i.test(modal.textContent ?? '') && !modal.hasAttribute('data-pink-seen')) {
-          modal.setAttribute('data-pink-seen', '');
-          for (const fn of this.addedListeners) {
-            try {
-              fn(modal);
-            } catch {
-              // um ouvinte com erro não derruba os outros
-            }
+    // O stream da INK pode substituir o próprio #last_added_product (vira turbo-frame):
+    // por isso a checagem sempre consulta o elemento atual, e o observador é refeito.
+    const checkAdded = () => {
+      const added = ink.lastAdded();
+      if (!added) return;
+      if (added !== this.watchedAdded) {
+        this.addedObserver?.disconnect();
+        this.watchedAdded = added;
+        this.addedObserver = new MutationObserver(checkAdded);
+        this.addedObserver.observe(added, { childList: true, subtree: true });
+      }
+      const modal = added.querySelector<HTMLElement>('#modal-wrapper, .add-product-modal') ?? (added.children.length ? (added.firstElementChild as HTMLElement) : null);
+      if (modal && /adicionad/i.test(modal.textContent ?? '') && !modal.hasAttribute('data-pink-seen')) {
+        modal.setAttribute('data-pink-seen', '');
+        for (const fn of this.addedListeners) {
+          try {
+            fn(modal);
+          } catch {
+            // um ouvinte com erro não derruba os outros
           }
         }
-      });
-      o.observe(added, { childList: true, subtree: true });
-      this.observers.push(o);
-    }
+      }
+    };
+    checkAdded();
     for (const type of ['turbo:before-stream-render', 'turbo:frame-render', 'turbo:frame-load']) {
-      document.addEventListener(type, schedule, { signal: this.lifetime.signal });
+      document.addEventListener(type, () => {
+        schedule();
+        setTimeout(checkAdded, 60);
+      }, { signal: this.lifetime.signal });
     }
     schedule();
   }
@@ -104,6 +115,9 @@ export class CartService {
   stop(): void {
     this.observers.forEach((o) => o.disconnect());
     this.observers = [];
+    this.addedObserver?.disconnect();
+    this.addedObserver = null;
+    this.watchedAdded = null;
     this.lifetime.abort();
     this.lifetime = new AbortController();
     clearTimeout(this.timer);

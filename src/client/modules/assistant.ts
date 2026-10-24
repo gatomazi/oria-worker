@@ -1,6 +1,6 @@
 // M10 — Assistente da loja. Respostas vêm do servidor (base de respostas da
-// loja + catálogo; IA opcional). Aqui só a interface: botão flutuante,
-// painel, sugestões, produtos e encaminhamento ao atendimento.
+// loja + catálogo e coleções da loja; sem IA). Aqui só a interface: botão
+// flutuante, painel, sugestões, produtos, coleções e encaminhamento ao atendimento.
 import { h, isMobile, safeHref, shadowHost } from '../runtime/dom.ts';
 import type { ClientModule, ModuleContext } from '../runtime/types.ts';
 
@@ -9,6 +9,7 @@ interface Reply {
   products?: { title: string; path: string; priceText: string; imageUrl: string }[];
   contact?: { label: string; url: string } | null;
   link?: { label: string; path: string };
+  collections?: { label: string; path: string }[];
   related?: string[];
   remaining?: number;
   error?: string;
@@ -129,6 +130,9 @@ const assistantModule: ClientModule = {
         bubble(r.answer ?? r.message ?? 'Não consegui responder agora.', 'bot');
         if (r.products?.length) {
           log.append(h('div', { class: 'prods' }, ...r.products.map((p) => h('a', { class: 'prod', href: safeHref(p.path) }, p.imageUrl ? h('img', { src: p.imageUrl, alt: '', loading: 'lazy' }) : h('span'), h('span', {}, p.title, p.priceText ? h('br') : '', p.priceText)))));
+        }
+        if (r.collections?.length) {
+          log.append(h('div', { class: 'chips' }, ...r.collections.filter((c) => safeHref(c.path)).map((c) => h('a', { class: 'act', href: safeHref(c.path) }, `Coleção ${c.label}`))));
         }
         const acts: HTMLElement[] = [];
         if (r.link && safeHref(r.link.path)) acts.push(h('a', { class: 'act', href: safeHref(r.link.path) }, r.link.label));

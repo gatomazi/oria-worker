@@ -41,12 +41,22 @@ test('avaliações: depoimentos, fotos e detalhe da foto (marcação real da INK
   assert.deepEqual(d?.products, ['Produto exemplo', 'Produto exemplo', 'Produto exemplo']);
 });
 
-test('carrinho: vazio (real) e com itens (estrutura documentada, simulada)', () => {
+test('carrinho com item: marcação REAL da INK (Vista, capturada pelo proxy)', () => {
+  const cart = readCart(doc(fixture('cart-drawer-com-item.html')), B);
+  assert.equal(cart?.empty, false);
+  assert.equal(cart?.count, 1);
+  assert.equal(cart?.subtotalCents, 10990);
+  assert.equal(cart?.discountCents, 0);
+  assert.deepEqual({ ...cart!.items[0] }, { productId: '4976077', variant: 'Preta-Masculino-M', name: 'Vó, Minha Maior Riqueza', quantity: 1, unitCents: 10990, fullCents: null, path: '' });
+  assert.ok(doc(fixture('cart-drawer-com-item.html')).querySelector('input[name="cart[coupon][code]"]'), 'campo de cupom da INK existe com item no carrinho');
+});
+
+test('carrinho: vazio (real) e com itens (réplica na estrutura real)', () => {
   const empty = readCart(doc(fixture('home.html')), B);
   assert.deepEqual({ empty: empty?.empty, goal: empty?.nativeFreightGoalCents }, { empty: true, goal: 0 });
   const full = readCart(doc(`<div class="cart-drawer">${cartFrame([{ productId: '1', name: 'X', variant: 'Preta-Masculino-M', quantity: 2, unitCents: 10990, path: '/vistaentrenos/product/x' }])}</div>`), B);
   assert.equal(full?.count, 2);
   assert.equal(full?.subtotalCents, 21980);
-  assert.equal(full?.items[0]?.path, '/vistaentrenos/product/x');
+  assert.equal(full?.items[0]?.productId, '1', 'como na INK real: o item traz o id do produto, sem link');
   assert.equal(readCart(doc('<div></div>'), B), null, 'estrutura desconhecida: null');
 });

@@ -384,7 +384,6 @@ async function viewOperation(id: string): Promise<void> {
     input('devHost', 'Endereço local de teste', s.devHost, {}, 'Usado só pelo Worker local (proxy).'),
     h('div', { class: 'two' }, input('searchPath', 'Caminho da busca', s.integration.searchPath, { placeholder: `${s.basePath}/products` }), input('supportWhatsapp', 'WhatsApp de atendimento', s.integration.supportWhatsapp, { type: 'tel' })),
     check('turbo', 'A loja navega com Turbo Drive (sem recarregar a página)', s.integration.turbo),
-    check('chatAi', 'Assistente com IA (exige credencial no servidor)', s.integration.chatAi, 'Sem credencial, o assistente responde só pela base de respostas.'),
     check('proxyCart', 'Proxy local: permitir adicionar/alterar itens do carrinho', s.integration.proxyCart, 'Só para homologação. Envia POST de carrinho para a loja real com a sessão. Checkout, login e pedidos continuam bloqueados.'),
     h('div', { class: 'field' }, h('label', { for: 'op-notes' }, 'Observações internas'), (() => {
       const t = h('textarea', { id: 'op-notes', name: 'notes', rows: '2' });
@@ -420,7 +419,7 @@ async function viewOperation(id: string): Promise<void> {
       basePath: v('basePath'),
       devHost: v('devHost'),
       notes: (dataForm.querySelector<HTMLTextAreaElement>('[name="notes"]')?.value ?? '').trim(),
-      integration: { searchPath: v('searchPath'), supportWhatsapp: v('supportWhatsapp'), turbo: c('turbo'), chatAi: c('chatAi'), proxyCart: c('proxyCart') },
+      integration: { searchPath: v('searchPath'), supportWhatsapp: v('supportWhatsapp'), turbo: c('turbo'), proxyCart: c('proxyCart') },
       packages: [...ent.querySelectorAll<HTMLInputElement>('input[name="pkg"]:checked')].map((i) => i.value),
       extraModules: [...ent.querySelectorAll<HTMLInputElement>('input[name="extra"]:checked')].map((i) => i.value),
     };

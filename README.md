@@ -92,12 +92,12 @@ Legenda:
 | M02 Categorias em abas | **A** | Vista: monta na home com 8 produtos reais da coleção, sem erros e sem rolagem lateral. jsdom: troca de aba muda os produtos e o "Ver todos"; atalhos repetidos só somem depois que as abas carregam | Páginas de coleção/listagem da própria loja (cache de 5 min na sessão) |
 | M03 Galeria com miniaturas | **A** | Vista: monta com as miniaturas das fotos reais, sem rolagem lateral no celular. jsdom: uma miniatura por foto navegável, clique aciona só o ponto nativo, variante intacta, acompanha a foto ativa | Carrossel nativo da INK |
 | M04 Compartilhamento | **A** | Vista: monta no produto. jsdom: WhatsApp com mensagem e link canônico limpo, copiar link | Canônico da página |
-| M05 Cupons (único, abas, lista) + selo de 1ª compra | **A** (bloco e selo) / **B** ("Usar no carrinho") | Vista: bloco na home e selo "10% na 1ª compra" junto ao preço do produto (e2e). jsdom: abas, vigência, copiar sem prometer desconto. "Usar no carrinho" só preenche o campo de cupom da INK (nunca envia), testado na marcação documentada | Campanhas cadastradas no painel (as mesmas da INK). A Vista não tem cupons nativos |
-| M06 Incentivo no carrinho + confirmação após adicionar | **C** | jsdom: progresso por peças/valor, faixas, frete nativo da INK tem prioridade, estimativa sinalizada, confirmação com sugestões reais (mais vendidos) | **Pendente**: carrinho com itens da Vista nunca observado. Leitor e réplica seguem a marcação documentada da Use Sul. Precisa liberar POST de carrinho no proxy para homologar |
+| M05 Cupons (único, abas, lista) + selo de 1ª compra | **A** | Vista: bloco na home e selo "10% na 1ª compra" junto ao preço do produto (e2e). "Usar no carrinho" verificado no carrinho real da Vista: preenche o campo de cupom da INK e não envia (a pessoa confirma lá). jsdom: abas, vigência, copiar sem prometer desconto | Campanhas cadastradas no painel (as mesmas da INK). A Vista não tem cupons nativos |
+| M06 Incentivo no carrinho + confirmação após adicionar | **A** | Vista (proxy com carrinho liberado, item de teste removido no fim): adicionar pela página do produto mostra o incentivo no modal "Produto adicionado" da INK; na gaveta, "Faltam 1 peça…" com 1 item e troca de faixa ao aumentar a quantidade. Marcação real capturada em `test/fixtures/ink/cart-drawer-com-item.html` e `last-added-product.html` (tokens removidos). jsdom: faixas, frete nativo com prioridade, participação por coleção pelo id do produto | Gaveta `turbo-frame#cart` e modal `#last_added_product` da INK. A INK **substitui** o `#last_added_product` a cada adição (o módulo refaz a observação). O item do carrinho não tem link do produto: a participação por coleção usa o id |
 | M07 Avaliações com fotos | **B** | Parser e módulo sobre a marcação real da INK (avaliações da Use Origens, só nos testes). A foto abre o depoimento de origem. Sem nota geral. Loja sem avaliações não mostra nada | `/reviews` da própria loja. **A Vista ainda não tem avaliações** |
 | M08 Cards de vídeo | **B** | Painel no Chrome: envio de arquivo de vídeo, vínculo no M08, publicação e card novo na loja. Réplica e jsdom: cards no início, vídeos vinculados na página do produto, player sem som automático com a peça (nome e preço da página real) | Biblioteca de vídeos da loja (envio de arquivo ou https; servido com Range) |
 | M09 Mini player | **B** | Réplica e jsdom: vídeo da peça com prioridade, fechamento respeitado (sessão/dia), recolhe com carrinho, menu ou modais, cede ao chat | Mesma biblioteca e mesmo player do M08 |
-| M10 Assistente | **B** (base de respostas) / **C** (IA) | Testes: resposta da base, busca por peça no catálogo real, rastreio pelo canal nativo, recusa CPF e cartão, limite por visita no servidor, teto diário por loja. Caminho de IA testado com cliente simulado | IA com `claude-opus-5-5` (configurável), esforço baixo e fallback em caso de recusa. **Pendente: `ANTHROPIC_API_KEY`** no servidor + IA ligada para a loja. Sem chave, nenhuma chamada externa |
+| M10 Assistente | **A** | Vista: "tem estampa de mãe?" → peças e a coleção Mães; "camiseta de pai" → coleção Pais (o tipo de peça não vira tema); "cachorro" → Pets; "namorado" → Casais; "presente pra vó" e "abelha" → busca da INK (com trecho do nome: "abelh" acha "Abelhinhas"); tema inexistente → "Não encontrei peças com…" e atendimento; dúvida → base de respostas. Testes: rastreio pelo canal nativo, recusa CPF e cartão, limites por visita e por dia | **Sem IA** (decisão do dono): base de respostas da loja, coleções do menu (com sinônimos comuns: papai, mamãe, filho, pet, namorado, fé) e busca nativa da INK. Nomes repetidos (uma cor por produto na INK) aparecem uma vez. Nenhuma chamada externa além da própria loja |
 | M11 Guia de medidas | **B** | jsdom: tabela da modelagem pelo nome ou categoria, ao lado do guia nativo, sugestão explicável comparando com uma peça da pessoa (sem altura e peso) | Tabelas cadastradas pela loja. **Complementa** o guia nativo da INK |
 | M12 Prazo de entrega | **A** | Vista: data real da INK para o CEP 01001-000 ("Entrega entre …"), pelo formulário de CEP da própria INK. Produção aparece separada | `delivery_estimates` da INK (formulário nativo; o módulo não chama o endpoint por fora) |
 
@@ -148,23 +148,21 @@ O compartilhamento com recompensa ficou para depois, porque falta a regra de con
 **Ateliê Aurora** e **Trilha Norte** são uma **réplica do HTML real da Vista**, gravado com GET (por isso aparece o logo "Entre Nós"), com identidade e combinação de módulos diferentes. O HTML é local, mas estilos, scripts e imagens continuam vindo da CDN da INK. Só os testes em jsdom são totalmente offline.
 - Avaliações, vídeos (sintéticos, barras de teste) e textos são fictícios e identificados.
 - Analytics é removido das páginas gravadas.
-- O carrinho com itens da réplica é simulado.
+- O carrinho com itens da réplica é simulado, na estrutura real capturada da Vista.
 
 ## Analytics
 
 Na **rodada 1**, as verificações pelo proxy chegaram a enviar visitas e eventos (GTM, gtag, pixel) da Vista a partir de `localhost`. Nesta rodada:
-- o proxy local remove os scripts de analytics da loja;
+- o proxy local remove os scripts externos de analytics e, nos scripts da própria loja, troca os domínios de rastreamento por um endereço inválido (o código da loja continua funcionando, nada é enviado);
 - a réplica não os tem;
 - os roteiros no Chrome bloqueiam esses domínios.
 
 ## O que falta / decisões pendentes
 
-1. **Carrinho real (M06 e "Usar no carrinho" do M05):** liberar POST de carrinho no proxy da Vista (opção de operador "Proxy local: permitir adicionar/alterar itens", desligada) para observar a marcação real e homologar.
-2. **Cupom real:** a Vista usa o texto provisório `TESTE10`. Cadastre o cupom na INK e troque no painel.
-3. **IA do assistente:** `ANTHROPIC_API_KEY` no servidor + ligar "Assistente com IA" na loja.
-4. **Produção:**
+1. **Cupom real:** a Vista usa o texto provisório `TESTE10`. Cadastre o cupom na INK e troque no painel.
+2. **Produção:**
    - painel com domínio e login próprios (hoje só em `127.0.0.1`);
    - banco gerenciado e KV para a configuração no edge (hoje SQLite e salto HTTP);
    - armazenamento de mídia (R2);
    - rota de teste aprovada.
-5. **Cobrança:** manual, fora do produto, nesta fase.
+3. **Cobrança:** manual, fora do produto, nesta fase.

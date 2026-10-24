@@ -45,8 +45,10 @@ export interface Progress {
 export function computeProgress(s: Pick<Settings, 'measure' | 'tiers'>, cart: CartState | null, eligible: Set<string> | null, nativeFreight: boolean): Progress {
   const tiers = s.tiers.filter((t) => !(nativeFreight && t.benefit === 'frete')).sort((a, b) => a.threshold - b.threshold);
   if (!cart) return { current: null, reached: [], next: tiers[0] ?? null, missing: null, estimate: true };
-  const items = eligible ? cart.items.filter((i) => i.path && eligible.has(i.path)) : cart.items;
-  if (eligible && cart.items.some((i) => !i.path)) return { current: null, reached: [], next: tiers[0] ?? null, missing: null, estimate: true };
+  // Participação: por id do produto (a INK não põe link do produto no item do carrinho) ou pelo caminho.
+  const isEligible = (i: CartState['items'][number]) => !!eligible && ((!!i.productId && eligible.has(`id:${i.productId}`)) || (!!i.path && eligible.has(i.path)));
+  const items = eligible ? cart.items.filter(isEligible) : cart.items;
+  if (eligible && cart.items.some((i) => !i.productId && !i.path)) return { current: null, reached: [], next: tiers[0] ?? null, missing: null, estimate: true };
   let current: number | null;
   if (s.measure === 'itens') current = items.reduce((n, i) => n + i.quantity, 0);
   else if (items.every((i) => i.unitCents !== null)) current = items.reduce((n, i) => n + (i.unitCents ?? 0) * i.quantity, 0);
@@ -93,7 +95,7 @@ const cartModule: ClientModule = {
     let eligible: Set<string> | null = null;
     if (s.eligibility === 'colecao' && s.eligiblePath) {
       try {
-        eligible = new Set(await cached(`eligible:${s.eligiblePath}`, 5 * 60_000, async () => parseProductCards(await fetchDoc(s.eligiblePath, signal), ctx.basePath).map((p) => p.path)));
+        eligible = new Set(await cached(`eligible:${s.eligiblePath}`, 5 * 60_000, async () => parseProductCards(await fetchDoc(s.eligiblePath, signal), ctx.basePath).flatMap((p) => [p.path, `id:${p.id}`])));
       } catch {
         eligible = null; // sem como confirmar participação: mostra só a regra geral
       }

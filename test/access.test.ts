@@ -26,7 +26,7 @@ before(async () => {
     secret: s.secret,
     port,
     storeUrl: (x) => `http://${x.devHost}:8787${x.basePath}`,
-    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, aiConfigured: false, probe: async () => ({ status: 200, body: '<html></html>' }) },
+    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, probe: async () => ({ status: 200, body: '<html></html>' }) },
   });
   await listen(admin, port);
   pub = createPublicServer({ stores: s.stores, media: s.media, secret: s.secret, assistant: s.assistant });

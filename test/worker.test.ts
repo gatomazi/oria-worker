@@ -64,7 +64,7 @@ const mf = new Miniflare({
     if (url.host === 'www.vistaentrenos.com.br') {
       if (url.pathname === '/') return new Response(null, { status: 301, headers: { location: 'https://www.vistaentrenos.com.br/vistaentrenos' } });
       return new Response(
-        '<html><head><script async src="https://www.googletagmanager.com/gtm.js?id=X"></script><script>gtag("js")</script></head><body data-store-fb-pixel-id="123"><div data-ink-store--segment-write-key-value="KEY"><a href="https://www.vistaentrenos.com.br/vistaentrenos/about">Sobre</a></div></body></html>',
+        '<html><head><script async src="https://www.googletagmanager.com/gtm.js?id=X"></script><script>function eventoDaLoja(){};(function(){var s=document.createElement("script");s.src="https://www.googletagmanager.com/gtm.js?id=X"})()</script></head><body data-store-fb-pixel-id="123"><div data-ink-store--segment-write-key-value="KEY"><a href="https://www.vistaentrenos.com.br/vistaentrenos/about">Sobre</a></div></body></html>',
         { headers: { 'content-type': 'text/html', 'set-cookie': '_reserva_ink_store_session=abc; path=/; secure; HttpOnly' } },
       );
     }
@@ -147,7 +147,9 @@ test('proxy local da loja real: só leitura, sem analytics, links e redirect no 
   assert.equal(root.res.headers.get('location'), 'http://vistaentrenos.localhost:8787/vistaentrenos');
   const n = hits.length;
   const page = await go('http://vistaentrenos.localhost:8787/vistaentrenos', { headers: { cookie: 'x=1' } });
-  assert.doesNotMatch(page.body, /googletagmanager|gtag\(|data-store-fb-pixel-id|value="KEY"/);
+  assert.doesNotMatch(page.body, /googletagmanager|data-store-fb-pixel-id|value="KEY"/, 'nenhum envio de analytics');
+  assert.match(page.body, /function eventoDaLoja\(\)\{\}/, 'código da loja no script inline continua íntegro');
+  assert.match(page.body, /analytics-bloqueado\.invalid/);
   assert.match(page.body, /href="http:\/\/vistaentrenos\.localhost:8787\/vistaentrenos\/about"/);
   assert.equal(page.res.headers.get('set-cookie'), null);
   assert.ok(hits.slice(n).every((h) => !h.includes('www.vistaentrenos') || h.includes('cookie=-')), 'cookies não vão para a loja');

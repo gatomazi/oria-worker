@@ -127,7 +127,7 @@ if (process.argv.includes('--vista')) {
     await api('/api/stores', {
       method: 'POST',
       json: {
-        store: { id: 'vista-entre-nos', name: 'Vista Entre Nós', ownerName: 'Gabriel Tomazi', ownerEmail: 'gabriel@local.invalid', domain: 'www.vistaentrenos.com.br', basePath: '/vistaentrenos', devHost: 'vistaentrenos.localhost', packages: ['vitrine', 'conversao'] },
+        store: { id: 'vista-entre-nos', name: 'Vista Entre Nós', ownerName: 'Gabriel Tomazi', ownerEmail: 'gabriel@local.invalid', domain: 'www.vistaentrenos.com.br', basePath: '/vistaentrenos', devHost: 'vistaentrenos.localhost', packages: ['vitrine', 'conversao', 'conteudo'] },
         identity: { logoUrl: '', primary: '#50313D', accent: '#9A3B5B', surface: '#F3E7CF', text: '#2A1A1D', font: 'inherit', style: 'suave' },
       },
     });
@@ -145,6 +145,14 @@ if (process.argv.includes('--vista')) {
       { title: 'Cupom de teste da homologação', description: 'Texto de teste: troque pelo cupom real cadastrado na INK.', code: 'TESTE10', conditions: 'Teste local: confirme que o código existe na INK antes de divulgar.', startsAt: null, endsAt: null, firstPurchase: false, nearPrice: false, badge: '' },
     ] });
     on(d, 'delivery', { productionMin: 3, productionMax: 7 });
+    // Assistente básico: perguntas por estampa trazem peças e coleções da própria Vista.
+    on(d, 'assistant', {
+      name: 'Ajuda Entre Nós (teste)',
+      greeting: 'Oi! Procura uma estampa? Pergunte aqui.',
+      suggestions: [{ text: 'Tem estampa de mãe?' }, { text: 'Como faço uma troca?' }],
+      knowledge: [{ topic: 'trocas', question: 'Como faço uma troca?', answer: 'Texto de teste: confira a política de trocas da loja antes de publicar.', keywords: 'troca, trocar, devolução' }],
+      productDiscovery: true,
+    });
   });
 }
 console.log('Pronto. Lojas: http://demo-aurora.localhost:8787/vistaentrenos e http://demo-trilha.localhost:8787/vistaentrenos');

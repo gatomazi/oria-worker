@@ -42,8 +42,6 @@ export interface Integration {
   searchPath: string;
   /** WhatsApp de atendimento (DDI+DDD+número) para o chat e o compartilhamento. */
   supportWhatsapp: string;
-  /** IA no chat: só com credencial configurada no servidor. */
-  chatAi: boolean;
   /**
    * Somente proxy local: deixa passar adicionar/alterar itens do carrinho
    * (POST <base>/cart e <base>/cart/item) com a sessão. Checkout e demais
@@ -52,7 +50,7 @@ export interface Integration {
   proxyCart: boolean;
 }
 
-export const DEFAULT_INTEGRATION: Integration = { turbo: false, searchPath: '', supportWhatsapp: '', chatAi: false, proxyCart: false };
+export const DEFAULT_INTEGRATION: Integration = { turbo: false, searchPath: '', supportWhatsapp: '', proxyCart: false };
 
 export interface Store {
   id: string;
@@ -214,7 +212,6 @@ export class StoreService {
       turbo: typeof integ.turbo === 'boolean' ? integ.turbo : existing?.integration.turbo ?? false,
       searchPath,
       supportWhatsapp: whats,
-      chatAi: typeof integ.chatAi === 'boolean' ? integ.chatAi : existing?.integration.chatAi ?? false,
       proxyCart: typeof integ.proxyCart === 'boolean' ? integ.proxyCart : existing?.integration.proxyCart ?? false,
     };
     const extraModules = Array.isArray(r.extraModules) ? r.extraModules.filter((m): m is string => typeof m === 'string') : existing?.extraModules ?? [];

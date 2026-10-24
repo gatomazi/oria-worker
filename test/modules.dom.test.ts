@@ -173,6 +173,16 @@ test('M05: "Usar no carrinho" só preenche o campo de cupom da INK, sem enviar',
 
 // ---------------------------------------------------------------- M06
 
+test('M06: participação por coleção casa pelo id do produto (o item do carrinho da INK não tem link)', async () => {
+  const { computeProgress } = await import('../src/client/modules/cart-incentive.ts');
+  const { readCart } = await import('../src/shared/ink-parse.ts');
+  const { JSDOM, VirtualConsole } = await import('jsdom');
+  const cart = readCart(new JSDOM(fixture('cart-drawer-com-item.html'), { virtualConsole: new VirtualConsole() }).window.document, '/vistaentrenos');
+  const tiers = [{ threshold: 1, benefit: 'percentual' as const, amount: 5, label: '5%' }];
+  assert.equal(computeProgress({ measure: 'itens', tiers }, cart, new Set(['id:4976077']), false).current, 1);
+  assert.equal(computeProgress({ measure: 'itens', tiers }, cart, new Set(['id:999']), false).current, 0);
+});
+
 test('M06: progresso por peças no carrinho; barra de frete nativa ativa vence a nossa', async () => {
   const line = (q: number) => ({ productId: '1', name: 'Camiseta', variant: 'Preta-Masculino-M', quantity: q, unitCents: 10990, path: '/vistaentrenos/product/x' });
   const tiers = [{ threshold: 2, benefit: 'percentual', amount: 10, label: '10% de desconto' }, { threshold: 300, benefit: 'frete', amount: 0, label: 'Frete grátis' }];
@@ -196,13 +206,16 @@ test('M06: progresso por peças no carrinho; barra de frete nativa ativa vence a
   assert.doesNotMatch(t2, /Faltam .* Frete grátis/, 'barra nativa da INK ativa: a faixa de frete daqui sai');
 });
 
-test('M06: após adição confirmada pela INK, mostra incentivo e sugestões reais', async () => {
+test('M06: após adição confirmada pela INK (modal real que SUBSTITUI o elemento), mostra incentivo e sugestões reais', async () => {
   const cfg = configWith({ cartIncentive: { campaignName: 'Leve mais', measure: 'itens', tiers: [{ threshold: 2, benefit: 'percentual', amount: 10, label: '10% de desconto' }], showAfterAdd: true, recommendations: 'mais-vendidos', recommendationCount: 3 } });
   const env = setup(PDP, PDP_PATH, cfg);
   env.run();
   await env.mountedAfter();
-  env.document.querySelector('#last_added_product')!.innerHTML = '<div id="modal-wrapper" class="add-product-modal">Produto adicionado ao carrinho<div class="add-product-modal__modal-content__footer"><button class="checkout-btn">Ver carrinho</button></div></div>';
-  await env.tick(200);
+  // Como a INK faz: turbo-stream "replace" troca o #last_added_product por um turbo-frame com o modal.
+  const fresh = new env.window.DOMParser().parseFromString(fixture('last-added-product.html'), 'text/html').querySelector('turbo-frame#last_added_product');
+  env.document.querySelector('#last_added_product')!.replaceWith(env.document.importNode(fresh, true));
+  env.document.dispatchEvent(new env.window.Event('turbo:before-stream-render'));
+  await env.tick(250);
   const block = env.document.querySelector('#modal-wrapper [data-pink-module="cartIncentive"]') as any;
   assert.ok(block, 'bloco dentro do modal nativo');
   const recs = block.shadowRoot.querySelectorAll('.rec');

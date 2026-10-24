@@ -42,38 +42,39 @@ interface CartLine {
 
 const brl = (c: number) => `R$ ${(c / 100).toFixed(2).replace('.', ',')}`;
 
-/** Gaveta do carrinho com itens, na estrutura documentada da INK (SIMULADA). */
+/** Gaveta do carrinho com itens, na estrutura REAL capturada na Vista (cart-drawer-com-item.html). Os valores são simulados. */
 export function cartFrame(lines: CartLine[], freightGoal = 0): string {
   const count = lines.reduce((n, l) => n + l.quantity, 0);
   const subtotal = lines.reduce((n, l) => n + l.unitCents * l.quantity, 0);
+  const sub = (subtotal / 100).toFixed(1);
   const items = lines
     .map(
-      (l, i) => `<li class="main-list__item" data-replay-simulated="true">
-      <a href="${l.path}"><img src="https://gcp-images.majestic.ink.rsvcloud.com/images/product_v2/main_image/0ee2ffd86f9569d8657849bc5b749c0b.webp" alt=""></a>
-      <div class="item-details"><p>${l.name}</p><p>${l.variant.split('-')[0]}</p><p>${l.variant.split('-').pop()}</p></div>
-      <form data-ink-store--cart-product-id-value="${l.productId}" data-ink-store--cart-product-variant-value="${l.variant}" action="${BASE}/cart/item" method="post">
-        <input type="hidden" name="cart_item[id]" value="${i + 1}"><input type="number" name="cart_item[quantity]" value="${l.quantity}">
-      </form>
-      <div class="price-details"><span>${brl(l.unitCents)}</span></div>
-    </li>`,
+      (l, i) => `<li class="main-list__item bg-gray-50 bg-white border-b-[0.50px] border-gray-200" data-replay-simulated="true">
+  <img src="https://gcp-images.majestic.ink.rsvcloud.com/images/product_v2/main_image/0ee2ffd86f9569d8657849bc5b749c0b.webp" alt="Imagem do produto" class="w-24 h-28">
+  <div class="item-wrapper justify-between pe-4"><header><div class="flex flex-row justify-between pt-3">
+    <div class="item-details"><p class="text-gray-900 text-xs font-medium pb-2">${l.name}</p><p class="text-xs font-light text-gray-400 pb-0.5"> ${l.variant.split('-')[0]} </p><p class="text-xs font-light text-gray-400"> ${l.variant.split('-').pop()} </p></div>
+    <div class="price-details"><div class="price flex flex-col"><span class="text-xs text-right font-medium text-gray-900 pb-1 mb-[10px]">${brl(l.unitCents)}</span></div></div>
+  </div></header>
+  <div class="item-details__footer"><form data-turbo="true" data-controller="ink-store--cart ink-store--progress-bar" data-ink-store--cart-target="formItem" data-ink-store--cart-product-id-value="${l.productId}" data-ink-store--cart-product-variant-value="${l.variant}" data-ink-store--cart-id-value="cart_item_${i + 1}" action="${BASE}/cart/item" accept-charset="UTF-8" method="post">
+    <div id="quantity-buttons" class="item-details__quantity"><input type="hidden" value="${i + 1}" name="cart_item[id]"><input class="quantity-input" type="text" value="${l.quantity}" name="cart_item[quantity]"></div>
+  </form></div></div></li>`,
     )
     .join('');
   const body = lines.length
-    ? `<div class="cart-drawer__main"><ul>${items}</ul></div>
-       <div class="cart-drawer__footer"><div class="footer-details" data-ink-store--cart-subtotal-value="${(subtotal / 100).toFixed(2)}" data-ink-store--cart-discount-value="0.0"><p>Total</p><p>${brl(subtotal)}</p></div>
-       <form id="coupon-form" class="cart-drawer__footer__coupon"><input name="cart[coupon][code]" placeholder="Cupom"></form>
-       <form action="${BASE}/cart/checkout_cart_items" data-turbo="false"><button id="checkout-btn" type="button">Finalizar compra</button></form></div>`
+    ? `<div class="cart-drawer__main flex-col bg-gray-50"><ul class="flex flex-col w-full !pb-6">${items}</ul></div>
+       <div class="cart-drawer__footer px-4 pb-4">
+       <form id="coupon-form" class="flex flex-col gap-4" data-turbo="true" action="${BASE}/cart/coupon" method="post"><div class="cart-drawer__footer__coupon mb-3"><label for="cart_coupon_Cupom">Cupom</label><input placeholder="CUPOM" class="coupon-input reset-input w-full" type="text" name="cart[coupon][code]" id="cart_coupon_code"><button type="button" class="btn-apply" id="apply_coupon_code">Aplicar</button></div></form>
+       <div class="footer-details gap-3.5 my-3.5" data-ink-store--cart-discount-value="0.0" data-ink-store--cart-subtotal-value="${sub}" data-ink-store--cart-free-custom-freight-min-cart-value="0" data-ink-store--progress-bar-max-progress-value="${freightGoal}"><ul><li><span>Subtotal</span><span id="amount">${brl(subtotal)}</span></li></ul><div><p>Total</p><p>${brl(subtotal)}</p></div></div>
+       <form class="pt-2.5" data-turbo="false" action="${BASE}/cart/checkout_cart_items"><button id="checkout-btn" type="button">Finalizar compra</button></form></div>`
     : `<div class="empty-cart"><turbo-frame id="most_sold_frame" src="${BASE}/cart/most_solds?empty_cart=true"></turbo-frame></div>`;
-  return `<turbo-frame id="cart"><div data-controller='ink-store--cart ink-store--progress-bar' data-ink-store--progress-bar-max-progress-value='${freightGoal}' data-ink-store--progress-bar-progress-value='${(subtotal / 100).toFixed(2)}'>
-    <header class="cart-drawer__header"><p id="quantity-header" data-quantityheader="${count}">Carrinho (${count} produtos)</p><button id="cart-drawer-close" type="button">×</button></header>
+  return `<turbo-frame id="cart"><div data-controller="ink-store--cart ink-store--progress-bar" data-ink-store--progress-bar-max-progress-value="${freightGoal}" data-ink-store--progress-bar-progress-value="${sub}" class="flex flex-col h-full">
+    <div class="cart-drawer__header p-3 bg-gray-50"><div class="top-header"><span>Carrinho <span id="quantity-header" data-quantityheader="${count}">(${count} produto${count > 1 ? 's' : ''})</span></span><button id="cart-drawer-close" type="button">×</button></div></div>
     ${body}</div></turbo-frame>`;
 }
 
-function addedModal(line: CartLine): string {
-  return `<div id="modal-wrapper" class="add-product-modal" role="dialog" style="position:fixed;inset:auto 0 0 0;background:#fff;z-index:50;padding:16px">
-    <p>Produto adicionado ao carrinho</p><p>${line.name}</p>
-    <div class="add-product-modal__modal-content__footer"><button class="checkout-btn" type="button">Ver carrinho</button><button id="continue-shopping-button" type="button">Continuar comprando</button></div>
-    <button id="modal-close-button" type="button">Fechar</button></div>`;
+/** Modal "Produto adicionado" REAL da Vista (last-added-product.html), entregue como a INK entrega: substituindo o elemento. */
+function addedModal(): string {
+  return fixture('last-added-product.html').replace(/^<!--[\s\S]*?-->\s*/, '');
 }
 
 export function createReplayOrigin(label: string): Server {
@@ -105,7 +106,7 @@ export function createReplayOrigin(label: string): Server {
         res.writeHead(200, { 'content-type': 'text/vnd.turbo-stream.html; charset=utf-8', 'set-cookie': `replay_cart=${id}; Path=/; HttpOnly; SameSite=Lax` });
         res.end(
           `<turbo-stream action="replace" target="cart"><template>${cartFrame(lines)}</template></turbo-stream>` +
-            `<turbo-stream action="update" target="last_added_product"><template>${addedModal(line)}</template></turbo-stream>`,
+            `<turbo-stream action="replace" target="last_added_product"><template>${addedModal()}</template></turbo-stream>`,
         );
       });
       return;

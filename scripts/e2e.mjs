@@ -292,7 +292,7 @@ try {
   // ---------------------------------------------------------------- lojas demo (réplica)
   const demo = await newCtx(DESKTOP);
   const d = await demo.newPage();
-  await d.goto('http://demo-aurora.localhost:8787/vistaentrenos', { waitUntil: 'load' });
+  await d.goto('http://demo-aurora.localhost:8787/vistaentrenos', { waitUntil: 'load', timeout: 60000 });
   await d.waitForTimeout(3000);
   await d.evaluate(() => document.querySelector('[data-pink-module="reviews"]')?.scrollIntoView());
   await d.waitForTimeout(800);
@@ -310,6 +310,17 @@ try {
   });
   await d.waitForTimeout(1500);
   check('M10 responde pela base da loja', launch && /Exemplo fictício/.test(await d.evaluate(() => document.querySelector('[data-pink-module="assistant"]').shadowRoot.textContent)));
+  await d.evaluate(() => {
+    const r = document.querySelector('[data-pink-module="assistant"]').shadowRoot;
+    r.querySelector('input').value = 'tem estampa de mãe?';
+    r.querySelector('form').requestSubmit();
+  });
+  await d.waitForTimeout(2500);
+  const found = await d.evaluate(() => {
+    const r = document.querySelector('[data-pink-module="assistant"]').shadowRoot;
+    return { prods: r.querySelectorAll('.prod').length, colecao: [...r.querySelectorAll('a.act')].some((a) => /Coleção Mães/.test(a.textContent) && a.getAttribute('href').endsWith('/collections/maes')) };
+  });
+  check('M10 procura por estampa: produtos da loja e a coleção "Mães"', found.prods > 0 && found.colecao, JSON.stringify(found));
   await d.screenshot({ path: `${SHOTS}/r2-demo-trilha-assistente-aberto.png` });
   await d.goto('http://demo-trilha.localhost:8787/vistaentrenos/product/vo-minha-maior-riqueza', { waitUntil: 'load' });
   await d.waitForTimeout(3000);

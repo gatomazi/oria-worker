@@ -213,7 +213,10 @@ export function readCart(root: ParentNode, basePath: string): CartState | null {
   if (!frame) return null;
   const progress = frame.querySelector('[data-ink-store--progress-bar-max-progress-value]');
   const goal = progress ? Number(progress.getAttribute('data-ink-store--progress-bar-max-progress-value')) : NaN;
-  const nativeFreightGoalCents = Number.isFinite(goal) ? Math.round(goal * 100) : null;
+  // Mínimo de frete grátis configurado na INK (aparece no rodapé do carrinho com itens).
+  const freeMin = Number(frame.querySelector('[data-ink-store--cart-free-custom-freight-min-cart-value]')?.getAttribute('data-ink-store--cart-free-custom-freight-min-cart-value') ?? NaN);
+  const bestGoal = Math.max(Number.isFinite(goal) ? goal : 0, Number.isFinite(freeMin) ? freeMin : 0);
+  const nativeFreightGoalCents = Number.isFinite(goal) || Number.isFinite(freeMin) ? Math.round(bestGoal * 100) : null;
   if (frame.querySelector('.empty-cart')) {
     return { empty: true, items: [], count: 0, subtotalCents: 0, discountCents: 0, nativeFreightGoalCents };
   }

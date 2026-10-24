@@ -28,8 +28,5 @@
     "e2e": "node scripts/build.mjs && node scripts/e2e.mjs",
     "check:loja": "node scripts/check-loja.mjs",
     "check": "npm run typecheck && npm test"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^1.3.0"
   }
 }

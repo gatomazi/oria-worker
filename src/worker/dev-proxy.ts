@@ -10,7 +10,9 @@
 import type { HostInfo } from './index.ts';
 
 const ANALYTICS_SRC = /googletagmanager|google-analytics|connect\.facebook|facebook\.net|konduto|segment\.(com|io)|apis\.google\.com\/js\/platform/i;
-const ANALYTICS_INLINE = /googletagmanager|gtag\(|fbq\(|konduto|analytics\.load|dataLayer/i;
+// Domínios de rastreamento trocados por um endereço inválido dentro dos scripts inline:
+// o código da loja continua íntegro (funções definidas ali seguem existindo), mas nada é enviado.
+const ANALYTICS_HOSTS = /(?:www\.)?googletagmanager\.com|www\.google-analytics\.com|connect\.facebook\.net|www\.facebook\.com\/tr|cdn\.segment\.com|api\.segment\.io|[a-z0-9.-]*konduto\.com|[a-z0-9.-]*k-analytix\.com/gi;
 
 function isLocal(host: HostInfo): boolean {
   return /^http:\/\/127\.0\.0\.1:\d+$/.test(host.devOrigin);
@@ -84,7 +86,11 @@ export function rewriteDevResponse(response: Response, host: HostInfo, proxyOrig
     })
     .on('script:not([src])', {
       text(t) {
-        if (ANALYTICS_INLINE.test(t.text)) t.replace('');
+        if (ANALYTICS_HOSTS.test(t.text)) {
+          ANALYTICS_HOSTS.lastIndex = 0;
+          t.replace(t.text.replace(ANALYTICS_HOSTS, 'analytics-bloqueado.invalid'), { html: true });
+        }
+        ANALYTICS_HOSTS.lastIndex = 0;
       },
     })
     .on('noscript', {
