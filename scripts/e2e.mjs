@@ -132,7 +132,7 @@ try {
   await ed.waitForSelector('.nav-item');
   check('Lojista aceita o convite e cai direto na própria loja', true);
   const navTexts = await ed.locator('.nav-item').allTextContents();
-  check('Módulos não liberados aparecem bloqueados', navTexts.some((t) => /M08.*não liberado/.test(t)) && navTexts.some((t) => /M05/.test(t) && !/não liberado/.test(t)));
+  check('Recursos não liberados aparecem bloqueados (lojista vê nomes, sem códigos)', navTexts.some((t) => /Cards de vídeos.*não liberado/.test(t)) && navTexts.some((t) => /Cupons em destaque/.test(t) && !/não liberado/.test(t)) && !navTexts.some((t) => /\bM\d\d\b/.test(t)));
 
   const frame = ed.frameLocator('.preview-iframe');
   const edFlash = async (re) => {
@@ -141,13 +141,14 @@ try {
   };
 
   // M05 pelo formulário gerado
-  await ed.click('.nav-item:has-text("M05")');
+  await ed.click('.nav-item:has-text("Cupons em destaque")');
   await setSwitch(ed.locator('#mod-enabled'), true);
   await ed.click('button:has-text("+ Campanha")');
   const camp = ed.locator('.field-list .item').first();
   await camp.getByLabel('Título').fill('10% na primeira compra');
   await camp.getByLabel('Código do cupom').fill('entrenos10');
   await camp.getByLabel('Condições de uso').fill('Teste local: cupom de demonstração; confirme o código real na INK antes de divulgar.');
+  await camp.locator('summary:has-text("Agendamento e mais opções")').click();
   await setSwitch(camp.getByLabel('Mostrar selo perto do preço nos cards de produto'), true);
   await camp.getByLabel('Texto do selo').fill('10% na 1ª compra');
   await frame.locator('[data-pink-module="coupons"]:not([data-pink-badge])').waitFor({ state: 'attached', timeout: 30000 }).catch(async (err) => {
@@ -163,7 +164,7 @@ try {
   await setSwitch(ed.locator('#mod-enabled'), true);
 
   // M02
-  await ed.click('.nav-item:has-text("M02")');
+  await ed.click('.nav-item:has-text("Categorias em abas")');
   await setSwitch(ed.locator('#mod-enabled'), true);
   await ed.click('button:has-text("+ Aba")');
   let tab = ed.locator('.field-list .item').nth(0);
@@ -174,9 +175,9 @@ try {
   await tab.getByLabel('Nome da aba').fill('Pais');
   await tab.getByLabel('Coleção ou listagem').fill('/vistaentrenos/collections/pais');
   // M03 e M12 com os padrões
-  await ed.click('.nav-item:has-text("M03")');
+  await ed.click('.nav-item:has-text("Galeria com miniaturas")');
   await setSwitch(ed.locator('#mod-enabled'), true);
-  await ed.click('.nav-item:has-text("M12")');
+  await ed.click('.nav-item:has-text("Prazo de entrega")');
   await setSwitch(ed.locator('#mod-enabled'), true);
 
   await ed.click('.head-actions button:has-text("Salvar rascunho")');
@@ -242,7 +243,7 @@ try {
   await mstore.screenshot({ path: `${SHOTS}/r2-vista-produto-mobile.png`, fullPage: true });
 
   // ---------------------------------------------------------------- desligar e restaurar
-  await ed.click('.nav-item:has-text("M05")');
+  await ed.click('.nav-item:has-text("Cupons em destaque")');
   await ed.click('button:has-text("Desligar na loja agora")');
   await edFlash(/desligado na loja/);
   await store.goto(`${VISTA}/vistaentrenos`, { waitUntil: 'load' });
@@ -273,8 +274,8 @@ try {
   await panel.goto(PANEL + '#/lojas/vista-entre-nos/operacao');
   await panel.reload();
   await panel.waitForSelector('.check-row', { timeout: 30000 });
-  const proxyCheck = await panel.locator('.check-row:has-text("Worker local")').textContent();
-  check('Instalação: Worker local insere o carregador na loja', /inserido/.test(proxyCheck ?? ''), proxyCheck?.replace(/\s+/g, ' ').slice(0, 120));
+  const proxyCheck = await panel.locator('.check-row:has-text("Teste local pelo proxy")').textContent();
+  check('Instalação: teste local insere o carregador (e não conta como instalado)', /inserido/.test(proxyCheck ?? '') && /validação remota pendente|Instalado/.test((await panel.locator('.check-row:has-text("Rota no domínio real")').textContent()) ?? ''), proxyCheck?.replace(/\s+/g, ' ').slice(0, 120));
   await panel.screenshot({ path: `${SHOTS}/r2-painel-instalacao.png`, fullPage: true });
 
   // ---------------------------------------------------------------- vídeo enviado pelo painel (M08)
@@ -286,7 +287,7 @@ try {
   await vcard.getByLabel('Título').first().fill('Vídeo enviado pelo painel');
   await vcard.locator('input[type=file][accept^="video"]').setInputFiles('test/fixtures/media/demo-sintetico.mp4');
   await panel.waitForFunction(() => [...document.querySelectorAll('.video-card')].pop()?.querySelector('input.mono')?.value.startsWith('/__pink/media/'), null, { timeout: 30000 });
-  await panel.click('.nav-item:has-text("M08")');
+  await panel.click('.nav-item:has-text("Cards de vídeos")');
   await panel.click('.video-opt label:has-text("Vídeo enviado pelo painel")');
   await panel.click('.head-actions button:has-text("Salvar rascunho")');
   await flash(/Rascunho salvo|não foi salvo/);

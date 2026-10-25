@@ -8,6 +8,8 @@ export interface FieldBase {
   help?: string;
   /** Mostra o campo só quando outro campo do mesmo nível tem um destes valores. */
   showWhen?: { key: string; in: (string | boolean)[] };
+  /** Opção secundária: fica num grupo recolhido ("Mais opções") no painel. */
+  advanced?: boolean;
 }
 
 export type Field =
@@ -24,7 +26,16 @@ export type Field =
   | (FieldBase & { type: 'httpsUrl'; required?: boolean; placeholder?: string; accept?: 'image' | 'video' | 'any' })
   | (FieldBase & { type: 'phone'; required?: boolean })
   | (FieldBase & { type: 'videoRefs'; max: number })
-  | (FieldBase & { type: 'list'; itemLabel: string; titleKey: string; min: number; max: number; fields: Field[] });
+  | (FieldBase & {
+      type: 'list';
+      itemLabel: string;
+      titleKey: string;
+      min: number;
+      max: number;
+      fields: Field[];
+      /** Linha de resumo de um item recolhido no painel (ex.: código · vigência · condição). */
+      summary?: (item: Values) => string;
+    });
 
 export interface Option {
   value: string;

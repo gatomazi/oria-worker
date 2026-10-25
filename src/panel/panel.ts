@@ -62,6 +62,9 @@ interface StoreView {
 const app = document.getElementById('app')!;
 const topbar = document.getElementById('topbar-user')!;
 let user: User | null = null;
+const isOperator = () => user?.role === 'operator';
+/** Lojista vê o nome do recurso; o código (M01–M13) é do diagnóstico do operador. */
+const modLabel = (d: { code: string; name: string }) => (isOperator() ? `${d.code} ${d.name}` : d.name);
 let packages: Pkg[] = [];
 let leaveGuard: (() => boolean) | null = null;
 
@@ -629,6 +632,7 @@ async function viewEditor(id: string): Promise<void> {
   // ---- estrutura
   const statusLive = h('p', { class: 'status-live' });
   const statusDraft = h('p', { class: 'status-draft' });
+  const statusShort = h('p', { class: 'status-short' });
   const saveBtn = h('button', { type: 'button', class: 'btn' }, 'Salvar rascunho');
   const pubBtn = h('button', { type: 'button', class: 'btn btn-primary' }, 'Publicar');
   const pubHint = h('p', { class: 'help hint' });
@@ -639,25 +643,62 @@ async function viewEditor(id: string): Promise<void> {
   const previewNote = h('p', { class: 'help preview-note', 'aria-live': 'polite' });
   const previewPages: Record<string, string> = { home: view.store.basePath || '/', listing: `${view.store.basePath}/products`, product: `${view.store.basePath}/products` };
   const pageSel = h('select', { 'aria-label': 'Página da prévia' }, h('option', { value: 'home' }, 'Início'), h('option', { value: 'listing' }, 'Listagem'), h('option', { value: 'product' }, 'Produto'));
-  const devBtns = ['Computador', 'Celular'].map((label, i) => h('button', { type: 'button', 'aria-pressed': i === 0 ? 'true' : 'false', 'data-w': i === 0 ? 'full' : '390' }, label));
-  const frameBox = h('div', { class: 'preview-frame', 'data-w': 'full' }, frame);
+  // A prévia renderiza a loja num viewport de verdade (computador 1440×900, celular 390×844)
+  // e reduz a imagem para caber na coluna: a largura do editor nunca decide o layout da loja.
+  const VIEWPORTS = { desktop: { w: 1440, h: 900 }, mobile: { w: 390, h: 844 } } as const;
+  let device: keyof typeof VIEWPORTS = 'desktop';
+  const devBtns = (['desktop', 'mobile'] as const).map((d) => h('button', { type: 'button', 'aria-pressed': d === device ? 'true' : 'false', 'data-device': d }, d === 'desktop' ? 'Computador' : 'Celular'));
+  const zoomBtn = h('button', { type: 'button', class: 'btn btn-small btn-quiet preview-zoom', 'aria-pressed': 'false' }, 'Ampliar');
+  const stage = h('div', { class: 'preview-stage' }, frame);
+  const frameBox = h('div', { class: 'preview-frame', 'data-device': device }, stage);
+  const fit = () => {
+    const vp = VIEWPORTS[device];
+    const avail = frameBox.clientWidth - (device === 'mobile' ? 24 : 0);
+    const maxH = previewPane.classList.contains('zoomed') ? window.innerHeight - 140 : Infinity;
+    const scale = Math.min(1, avail / vp.w, maxH / vp.h);
+    frame.style.width = `${vp.w}px`;
+    frame.style.height = `${vp.h}px`;
+    frame.style.transform = `scale(${scale})`;
+    stage.style.width = `${Math.round(vp.w * scale)}px`;
+    stage.style.height = `${Math.round(vp.h * scale)}px`;
+    frameBox.dataset.scale = String(Math.round(scale * 100));
+  };
+  new ResizeObserver(() => fit()).observe(frameBox);
   let previewReady = false;
   let previewOrigin = '';
 
   const header = h(
     'div',
     { class: 'editor-head' },
-    h('div', {}, crumbs(...(user?.role === 'operator' ? [['Lojas', '#/lojas'] as [string, string]] : []), view.store.name), h('h1', {}, view.store.name), statusLive, statusDraft),
+    h('div', {}, crumbs(...(user?.role === 'operator' ? [['Lojas', '#/lojas'] as [string, string]] : []), view.store.name), h('h1', {}, view.store.name), statusLive, statusDraft, statusShort),
     h('div', { class: 'head-actions' }, user?.role === 'operator' ? h('a', { class: 'btn btn-quiet', href: `#/lojas/${id}/operacao` }, 'Operação') : null, h('a', { class: 'btn btn-quiet', href: view.storeUrl, target: '_blank', rel: 'noopener' }, 'Abrir loja ↗'), h('div', { class: 'head-primary' }, saveBtn, pubBtn)),
   );
   const previewPane = h(
     'aside',
     { class: 'preview' },
-    h('div', { class: 'preview-head' }, h('h2', {}, 'Prévia na loja'), pageSel, h('div', { class: 'seg', role: 'group', 'aria-label': 'Largura' }, ...devBtns)),
+    h('div', { class: 'preview-head' }, h('h2', {}, 'Prévia na loja'), pageSel, h('div', { class: 'seg', role: 'group', 'aria-label': 'Dispositivo' }, ...devBtns), zoomBtn),
     previewNote,
     frameBox,
   );
-  app.replaceChildren(header, pubHint, errBox, h('div', { class: 'editor' }, nav, main, previewPane));
+  // Celular: alternância explícita entre editar e ver a prévia (o rascunho não salvo vai junto).
+  const modeBtns = (['edit', 'preview'] as const).map((m) => h('button', { type: 'button', 'aria-pressed': m === 'edit' ? 'true' : 'false', 'data-mode': m }, m === 'edit' ? 'Editar' : 'Ver prévia'));
+  const modeBar = h('div', { class: 'seg mode-toggle', role: 'group', 'aria-label': 'Modo' }, ...modeBtns);
+  const editorEl = h('div', { class: 'editor', 'data-mode': 'edit' }, nav, main, previewPane);
+  modeBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      if (form) readForm();
+      const m = b.dataset.mode!;
+      editorEl.dataset.mode = m;
+      modeBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+      if (m === 'preview') {
+        if (window.matchMedia('(max-width: 860px)').matches && device !== 'mobile') devBtns.find((d) => d.dataset.device === 'mobile')?.click();
+        pushPreview();
+        requestAnimationFrame(fit);
+      }
+      window.scrollTo({ top: 0 });
+    }),
+  );
+  app.replaceChildren(header, pubHint, errBox, modeBar, editorEl);
 
   // ---- prévia
   const loadPreview = async () => {
@@ -683,9 +724,22 @@ async function viewEditor(id: string): Promise<void> {
   devBtns.forEach((b) =>
     b.addEventListener('click', () => {
       devBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
-      frameBox.dataset.w = b.dataset.w!;
+      device = b.dataset.device as keyof typeof VIEWPORTS;
+      frameBox.dataset.device = device;
+      fit();
     }),
   );
+  // Ampliar: a prévia ocupa a tela para inspeção (Esc ou o mesmo botão voltam).
+  const setZoom = (on: boolean) => {
+    previewPane.classList.toggle('zoomed', on);
+    zoomBtn.setAttribute('aria-pressed', String(on));
+    zoomBtn.textContent = on ? 'Fechar ampliação' : 'Ampliar';
+    document.body.classList.toggle('preview-zoomed', on);
+    fit();
+  };
+  zoomBtn.addEventListener('click', () => setZoom(!previewPane.classList.contains('zoomed')));
+  document.addEventListener('keydown', (e) => e.key === 'Escape' && previewPane.classList.contains('zoomed') && setZoom(false));
+  requestAnimationFrame(fit);
 
   function pushPreview(): void {
     if (!previewReady || !frame.contentWindow) return;
@@ -712,6 +766,8 @@ async function viewEditor(id: string): Promise<void> {
           ? `Rascunho: igual à versão ${p.version}`
           : `Rascunho: alterações salvas em ${when(view.draft.updatedAt)}, ainda não publicadas`;
     statusDraft.dataset.tone = dirty ? 'warn' : view.draftMatchesPublished ? 'muted' : 'info';
+    statusShort.textContent = `${p ? `Na loja: v${p.version} · ${enabledLive} ligado(s)` : 'Nada publicado'} · ${dirty ? 'alterações não salvas' : !p || !view.draftMatchesPublished ? 'rascunho a publicar' : 'rascunho igual'}`;
+    statusShort.dataset.tone = statusDraft.dataset.tone;
     saveBtn.disabled = !dirty;
     const nothingNew = !!p && view.draftMatchesPublished;
     pubBtn.disabled = dirty || nothingNew;
@@ -748,7 +804,7 @@ async function viewEditor(id: string): Promise<void> {
         chips.push(h('span', { class: `chip ${live === 'on' ? 'on' : ''}` }, live === 'on' ? 'na loja' : 'fora da loja'));
         if (draftOn !== (view.published?.config.modules[d.id]?.enabled ?? false)) chips.push(h('span', { class: 'chip warn', title: 'O rascunho muda este módulo; vale ao publicar' }, draftOn ? 'liga ao publicar' : 'desliga ao publicar'));
       }
-      return item(`${d.code} ${d.name}`, { kind: 'module', id: d.id }, chips, !ent);
+      return item(modLabel(d), { kind: 'module', id: d.id }, chips, !ent);
     });
     // Celular: as seções viram um seletor compacto, para o formulário aparecer logo.
     const sel = h('select', { class: 'side-select', 'aria-label': 'Seção' });
@@ -765,7 +821,7 @@ async function viewEditor(id: string): Promise<void> {
       opt('Integração com a INK', 'integration', cur === 'integration'),
       ...moduleDefs().map((d) => {
         const live = liveState(d.id);
-        return opt(`${d.code} ${d.name}${view.entitled.includes(d.id) ? (live === 'on' ? ' · na loja' : '') : ' · não liberado'}`, `m:${d.id}`, cur === `m:${d.id}`, !view.entitled.includes(d.id));
+        return opt(`${modLabel(d)}${view.entitled.includes(d.id) ? (live === 'on' ? ' · na loja' : '') : ' · não liberado'}`, `m:${d.id}`, cur === `m:${d.id}`, !view.entitled.includes(d.id));
       }),
     );
     sel.addEventListener('change', () => {
@@ -807,7 +863,12 @@ async function viewEditor(id: string): Promise<void> {
     if (lastErrors.length) {
       errBox.replaceChildren(h('p', {}, 'Revise antes de salvar:'), h('ul', {}, ...lastErrors.slice(0, 10).map((e) => h('li', {}, e.message))));
       errBox.hidden = false;
-      if (focus) errBox.focus();
+      if (focus) {
+        // Leva ao primeiro campo com erro (abre o item da lista e o grupo de opções, se preciso).
+        const field = main.querySelector<HTMLElement>('.has-error input:not([type=hidden]), .has-error textarea, .has-error select');
+        if (field) field.focus();
+        else errBox.focus();
+      }
     } else errBox.hidden = true;
     return lastErrors;
   }
@@ -862,7 +923,7 @@ async function viewEditor(id: string): Promise<void> {
         h(
           'section',
           { class: 'card stack' },
-          h('div', { class: 'mod-head' }, h('div', { class: 'mod-title' }, h('h2', {}, h('span', { class: 'code' }, def.code), def.name), h('p', { class: 'help' }, def.summary)), h('label', { class: 'switch big', for: 'mod-enabled' }, toggle, h('span', { class: 'switch-track', 'aria-hidden': 'true' }), h('span', {}, 'Ativo no rascunho'))),
+          h('div', { class: 'mod-head' }, h('div', { class: 'mod-title' }, h('h2', {}, isOperator() ? h('span', { class: 'code' }, def.code) : '', def.name), h('p', { class: 'help' }, def.summary)), h('label', { class: 'switch big', for: 'mod-enabled' }, toggle, h('span', { class: 'switch-track', 'aria-hidden': 'true' }), h('span', {}, 'Ativo no rascunho'))),
           h('div', { class: 'now-row' }, h('span', { class: `pill ${live === 'on' ? 'on' : ''}` }, live === 'on' ? 'Ligado na loja' : live === 'off' ? 'Desligado na loja' : 'Nada publicado'), now, h('span', { class: 'help' }, live === 'none' ? 'Publique uma vez para poder ligar/desligar na hora.' : 'Liga ou desliga só este módulo na versão publicada, sem publicar o resto do rascunho.')),
           user?.role === 'operator' && def.integrations.length ? h('p', { class: 'help' }, `Depende de: ${def.integrations.join(', ')}.`) : null,
           form.el,
@@ -973,7 +1034,7 @@ async function viewEditor(id: string): Promise<void> {
       renderVideos();
     });
     main.replaceChildren(
-      h('section', { class: 'card stack' }, h('h2', {}, 'Biblioteca de vídeos'), h('p', { class: 'help' }, `Usada pelos cards de vídeo (M08) e pelo mini player (M09). ${media.length} arquivo(s) enviado(s) para esta loja.`)),
+      h('section', { class: 'card stack' }, h('h2', {}, 'Biblioteca de vídeos'), h('p', { class: 'help' }, `Usada pelos cards de vídeo e pelo mini player. ${media.length} arquivo(s) enviado(s) para esta loja.`)),
       list,
       add,
     );
@@ -1004,7 +1065,7 @@ async function viewEditor(id: string): Promise<void> {
       draft.modules[mid] = { ...draft.modules[mid]!, settings: cur };
       renderStatus();
       pushPreview();
-      flash(`${msg} Está no rascunho: revise em ${def.code}, salve e publique.`);
+      flash(`${msg} Está no rascunho: revise em ${def.name}, salve e publique.`);
     };
     const can = (mid: string) => view.entitled.includes(mid);
 
@@ -1027,7 +1088,7 @@ async function viewEditor(id: string): Promise<void> {
         // Cupons vistos no produto: valem com certeza só para aquele produto. Em vez de virar
         // campanha da loja toda, o M05 passa a ler os cupons da INK em cada produto, na hora.
         const inkOn = draft.modules.coupons?.settings.inkCoupons === true;
-        const readInk = h('button', { type: 'button', class: 'btn btn-small', disabled: inkOn || !can('coupons') }, inkOn ? 'Já lidos em cada produto (M05)' : 'Mostrar em cada produto (M05)');
+        const readInk = h('button', { type: 'button', class: 'btn btn-small', disabled: inkOn || !can('coupons') }, inkOn ? 'Já mostrados em cada produto' : 'Mostrar em cada produto');
         readInk.addEventListener('click', () =>
           editModule('coupons', (set) => {
             set.inkCoupons = true;
@@ -1043,7 +1104,7 @@ async function viewEditor(id: string): Promise<void> {
             data.coupons.length
               ? h('ul', { class: 'int-list' }, ...data.coupons.map((c) => h('li', {}, h('code', {}, c.code), ' ', h('span', {}, [c.savings, ...c.rules].filter(Boolean).join(' · ')), h('span', { class: 'help' }, ` — visto em "${c.seenOn}"`))))
               : h('p', { class: 'empty' }, 'Nenhum cupom apareceu nos produtos lidos.'),
-            h('p', { class: 'help' }, 'A página do produto não diz se o cupom vale para a loja toda, então ele não vira campanha geral: o M05 mostra cada cupom só nos produtos em que a INK o oferece, com o mesmo código e as mesmas regras. Com a API da INK, os cupons vêm com o alcance e podem virar campanha.'),
+            h('p', { class: 'help' }, 'A página do produto não diz se o cupom vale para a loja toda, então ele não vira campanha geral: os Cupons mostram cada cupom só nos produtos em que a INK o oferece, com o mesmo código e as mesmas regras. Com a API da INK, os cupons vêm com o alcance e podem virar campanha.'),
           ),
         );
         // Promoção progressiva
@@ -1055,24 +1116,24 @@ async function viewEditor(id: string): Promise<void> {
               h('h3', {}, 'Promoção progressiva'),
               ...data.progressive.map((p) => {
                 // O texto do produto não informa o alcance: só a pessoa pode confirmar que vale para a loja toda.
-                const use = h('button', { type: 'button', class: 'btn btn-small', disabled: true }, 'Usar no M06 Incentivo do carrinho');
+                const use = h('button', { type: 'button', class: 'btn btn-small', disabled: true }, 'Usar no incentivo do carrinho');
                 const sure = h('input', { type: 'checkbox' });
                 sure.addEventListener('change', () => (use.disabled = !sure.checked || !can('cartIncentive')));
                 use.addEventListener('click', () => {
                   const cur = list(draft.modules.cartIncentive?.settings.tiers);
-                  if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do M06 pelas da promoção ${p.code}?`)) return;
+                  if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do incentivo do carrinho pelas da promoção ${p.code}?`)) return;
                   editModule('cartIncentive', (set) => {
                     set.campaignName = p.code;
                     set.measure = p.measure;
                     set.tiers = p.tiers.map((t) => ({ threshold: t.threshold, benefit: t.benefit, amount: t.amount, label: t.label }));
-                    return `Faixas da promoção ${p.code} levadas ao M06.`;
+                    return `Faixas da promoção ${p.code} levadas ao incentivo do carrinho.`;
                   });
                 });
                 return h(
                   'div',
                   { class: 'stack' },
                   h('div', { class: 'row-between' }, h('p', {}, h('code', {}, p.code), ' ', p.tiers.map((t) => `${t.threshold} peças: ${t.label}`).join(' · ')), use),
-                  h('label', { class: 'check' }, sure, h('span', {}, `Confirmo que a promoção ${p.code} vale para a loja toda. A página do produto não informa o alcance; se ela valer só para parte do catálogo, configure o M06 à mão.`)),
+                  h('label', { class: 'check' }, sure, h('span', {}, `Confirmo que a promoção ${p.code} vale para a loja toda. A página do produto não informa o alcance; se ela valer só para parte do catálogo, configure o incentivo do carrinho à mão.`)),
                 );
               }),
               h('p', { class: 'help' }, 'As faixas vêm do texto que a INK mostra no produto. O desconto continua sendo aplicado pela INK.'),
@@ -1092,7 +1153,7 @@ async function viewEditor(id: string): Promise<void> {
               : h('p', { class: 'empty' }, 'A loja não tem perguntas frequentes publicadas na INK.'),
             h('p', {}, h('strong', {}, 'Sobre: '), data.about?.text ? data.about.text.slice(0, 220) : 'página Sobre sem texto.'),
             h('p', {}, h('strong', {}, 'Contatos: '), contactLine || 'nenhum encontrado nas páginas.'),
-            h('p', { class: 'help' }, 'O M10 Assistente usa isto sozinho quando "Responder também com o que a loja já publicou na INK" está ligado. O que você cadastrar na base de respostas do M10 prevalece.'),
+            h('p', { class: 'help' }, 'O Assistente usa isto sozinho quando "Responder também com o que a loja já publicou na INK" está ligado. O que você cadastrar na base de respostas do Assistente prevalece.'),
           ),
         );
         blocks.push(
@@ -1154,31 +1215,31 @@ async function viewEditor(id: string): Promise<void> {
           const asCampaign = promotionToCampaign(pr);
           const asIncentive = promotionToIncentive(pr, colPath);
           const blocker = asIncentive ? null : incentiveBlocker(pr, colPath);
-          const toM05 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asCampaign || inM05 || !can('coupons') }, inM05 ? 'Já no M05' : 'Cupom no M05');
+          const toM05 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asCampaign || inM05 || !can('coupons') }, inM05 ? 'Já nos Cupons' : 'Levar aos Cupons');
           toM05.title = asCampaign ? '' : 'Promoção automática: a INK aplica sozinha, não há código para o cliente copiar.';
           toM05.addEventListener('click', () =>
             editModule('coupons', (set) => {
-              if (list(set.campaigns).length >= 6) return 'O M05 já tem 6 campanhas: remova uma antes.';
+              if (list(set.campaigns).length >= 6) return 'Os Cupons já têm 6 campanhas: remova uma antes.';
               set.campaigns = [...list(set.campaigns), asCampaign!];
               paint();
-              return `Cupom ${pr.code} adicionado ao M05.`;
+              return `Cupom ${pr.code} adicionado aos Cupons.`;
             }),
           );
-          const toM06 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asIncentive || !can('cartIncentive') }, 'Metas no M06');
-          if (blocker) toM06.title = `Não dá para levar ao M06 sem mudar o alcance: ${blocker}`;
+          const toM06 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asIncentive || !can('cartIncentive') }, 'Levar ao incentivo do carrinho');
+          if (blocker) toM06.title = `Não dá para levar ao incentivo do carrinho sem mudar o alcance: ${blocker}`;
           toM06.addEventListener('click', () => {
             const cur = list(draft.modules.cartIncentive?.settings.tiers);
-            if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do M06 pelas da promoção ${pr.code}?`)) return;
+            if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do incentivo do carrinho pelas da promoção ${pr.code}?`)) return;
             editModule('cartIncentive', (set) => {
               Object.assign(set, asIncentive);
-              return `Metas da promoção ${pr.code} levadas ao M06${set.eligibility === 'colecao' ? ', só com os itens da coleção dela' : ''}.`;
+              return `Metas da promoção ${pr.code} levadas ao incentivo do carrinho${set.eligibility === 'colecao' ? ', só com os itens da coleção dela' : ''}.`;
             });
           });
           const status = !pr.available ? (pr.startsAt && Date.parse(pr.startsAt) > Date.now() ? 'agendada' : 'fora do ar') : pr.automatic ? 'automática' : 'com código';
           return h(
             'li',
             { class: 'int-promo' },
-            h('div', {}, h('code', {}, pr.code), ' ', h('span', { class: `pill ${pr.available ? 'on' : 'warn'}` }, status), ' ', h('span', { class: 'chip' }, TYPE[pr.type]), h('br'), h('span', {}, tierLines(pr).join(' · ') || promotionSummary(pr)), h('br'), h('span', { class: 'help' }, [pr.firstPurchase ? 'Só na primeira compra.' : '', SCOPE_TEXT[pr.scope], pr.expiresAt ? `Até ${when(pr.expiresAt)}.` : ''].filter(Boolean).join(' ')), blocker ? h('span', { class: 'help block' }, `Fica fora do M06: ${blocker}`) : ''),
+            h('div', {}, h('code', {}, pr.code), ' ', h('span', { class: `pill ${pr.available ? 'on' : 'warn'}` }, status), ' ', h('span', { class: 'chip' }, TYPE[pr.type]), h('br'), h('span', {}, tierLines(pr).join(' · ') || promotionSummary(pr)), h('br'), h('span', { class: 'help' }, [pr.firstPurchase ? 'Só na primeira compra.' : '', SCOPE_TEXT[pr.scope], pr.expiresAt ? `Até ${when(pr.expiresAt)}.` : ''].filter(Boolean).join(' ')), blocker ? h('span', { class: 'help block' }, `Fica fora do incentivo do carrinho: ${blocker}`) : ''),
             h('div', { class: 'row' }, toM05, toM06),
           );
         };
@@ -1189,13 +1250,13 @@ async function viewEditor(id: string): Promise<void> {
           d.promotions.length ? h('ul', { class: 'int-list plain' }, ...[...live, ...later].map(promoRow)) : h('p', { class: 'empty' }, 'Nenhuma promoção cadastrada na INK.'),
         );
         const cols = d.collections.filter((c) => c.products > 0);
-        const toM02 = h('button', { type: 'button', class: 'btn btn-small', disabled: !cols.length || !can('categoryTabs') }, 'Usar as 6 primeiras no M02');
+        const toM02 = h('button', { type: 'button', class: 'btn btn-small', disabled: !cols.length || !can('categoryTabs') }, 'Usar as 6 primeiras nas Categorias em abas');
         toM02.addEventListener('click', () => {
           const cur = list(draft.modules.categoryTabs?.settings.tabs);
-          if (cur.length && !confirm(`Substituir as ${cur.length} aba(s) atuais do M02 pelas categorias da INK, na ordem do menu?`)) return;
+          if (cur.length && !confirm(`Substituir as ${cur.length} aba(s) atuais das Categorias em abas pelas categorias da INK, na ordem do menu?`)) return;
           editModule('categoryTabs', (set) => {
             set.tabs = cols.slice(0, 6).map((c) => ({ label: c.name.slice(0, 30), path: c.path }));
-            return 'Abas do M02 preenchidas com as categorias da INK, na ordem do menu.';
+            return 'Categorias em abas preenchidas com as categorias da INK, na ordem do menu.';
           });
         });
         apiBlocks.push(
@@ -1205,7 +1266,7 @@ async function viewEditor(id: string): Promise<void> {
           h(
             'p',
             { class: 'help' },
-            `O M10 Assistente procura por estampa no nome, nas tags (${d.products.withTags} produtos com tags) e no tipo da peça, mais vendidos primeiro. ${d.products.clusters} estampas têm mais de uma versão agrupada na INK (base para um "Também disponível em").`,
+            `O Assistente procura por estampa no nome, nas tags (${d.products.withTags} produtos com tags) e no tipo da peça, mais vendidos primeiro. ${d.products.clusters} estampas têm mais de uma versão agrupada na INK (base para um "Também disponível em").`,
           ),
           ...(d.products.bestSellers.length ? [h('p', {}, h('strong', {}, 'Mais vendidos: '), d.products.bestSellers.map((x) => `${x.name} (${x.sales})`).join(' · '))] : []),
           ...d.problems.map((pb) => h('p', { class: 'error-text' }, `${pb.resource}: ${pb.message}`)),

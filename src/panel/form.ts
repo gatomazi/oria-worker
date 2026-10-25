@@ -58,10 +58,19 @@ export function buildForm(fields: Field[], values: Values, ctx: FormContext): Fo
   const root = h('div', { class: 'fields' });
   const controls: Control[] = [];
 
+  // Opções secundárias ficam num grupo recolhido; abre sozinho quando um campo dele tem erro.
+  const advanced = fields.some((f) => f.advanced) ? h('details', { class: 'more-opts' }, h('summary', {}, 'Agendamento e mais opções')) : null;
+  const advBody = advanced ? h('div', { class: 'fields' }) : null;
+  if (advanced && advBody) advanced.append(advBody);
   for (const field of fields) {
     const c = control(field, values[field.key], ctx);
     controls.push(c);
-    root.append(c.wrap);
+    (field.advanced && advBody ? advBody : root).append(c.wrap);
+  }
+  if (advanced) {
+    root.append(advanced);
+    // Já preenchido? começa aberto, para não esconder uma vigência ou um selo configurados.
+    if (fields.some((f) => f.advanced && f.type !== 'toggle' && values[f.key]) || fields.some((f) => f.advanced && f.type === 'toggle' && values[f.key] === true)) advanced.open = true;
   }
 
   const applyVisibility = () => {
@@ -86,6 +95,7 @@ export function buildForm(fields: Field[], values: Values, ctx: FormContext): Fo
       const mine = errors.filter((e) => e.field === path);
       c.errorEl.textContent = mine.map((e) => e.message).join(' ');
       c.wrap.classList.toggle('has-error', mine.length > 0);
+      if (mine.length && c.field.advanced && advanced) advanced.open = true;
       c.children?.().forEach(({ index, handle }) => handle.showErrors(errors, `${path}.${index}`));
     }
   }
@@ -279,37 +289,64 @@ function control(field: Field, value: unknown, ctx: FormContext): Control {
       return { field, wrap, read, errorEl };
     }
     case 'list': {
-      const items: { handle: FormHandle; box: HTMLElement }[] = [];
+      // Lista resumida: cada item é uma linha (título + resumo); um item aberto por vez.
+      // Recolher, reordenar e trocar de seção não perdem valores: o formulário do item continua vivo.
+      type Entry = { key: string; handle: FormHandle; box: HTMLElement; head: HTMLButtonElement; body: HTMLElement; title: HTMLElement; sub: HTMLElement };
+      const items: Entry[] = [];
       const listEl = h('div', { class: 'repeater' });
       const add = h('button', { type: 'button', class: 'btn btn-small' }, `+ ${field.itemLabel}`);
+      const describe = (e: Entry) => {
+        const v = e.handle.read();
+        e.title.textContent = String(v[field.titleKey] ?? '').trim() || `${field.itemLabel} ${items.indexOf(e) + 1}`;
+        e.sub.textContent = field.summary ? field.summary(v) : '';
+      };
       const renumber = () => {
-        items.forEach(({ box }, i) => {
-          const t = box.querySelector('.item-title');
-          if (t) t.textContent = `${field.itemLabel} ${i + 1}`;
+        items.forEach((e, i) => {
+          describe(e);
+          e.box.querySelector<HTMLButtonElement>('[data-act="up"]')!.disabled = i === 0;
+          e.box.querySelector<HTMLButtonElement>('[data-act="down"]')!.disabled = i === items.length - 1;
         });
         add.disabled = items.length >= field.max;
       };
-      const addItem = (v: Values) => {
+      const setOpen = (e: Entry | null) => {
+        for (const x of items) {
+          const open = x === e;
+          x.body.hidden = !open;
+          x.box.classList.toggle('open', open);
+          x.head.setAttribute('aria-expanded', String(open));
+          if (!open) describe(x);
+        }
+      };
+      const addItem = (v: Values, open = false) => {
         const handle = buildForm(field.fields, v, ctx);
-        const box = h('div', { class: 'item' });
-        const up = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Mover para cima' }, '↑');
-        const down = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Mover para baixo' }, '↓');
+        const key = nextId('item');
+        const title = h('span', { class: 'item-title' });
+        const sub = h('span', { class: 'item-sub' });
+        const head = h('button', { type: 'button', class: 'item-toggle', 'aria-expanded': 'false', 'aria-controls': `${key}-body` }, h('span', { class: 'item-text' }, title, sub), h('span', { class: 'item-chevron', 'aria-hidden': 'true' }));
+        const up = h('button', { type: 'button', class: 'icon-btn', 'data-act': 'up', 'aria-label': 'Mover para cima' }, '↑');
+        const down = h('button', { type: 'button', class: 'icon-btn', 'data-act': 'down', 'aria-label': 'Mover para baixo' }, '↓');
         const del = h('button', { type: 'button', class: 'icon-btn danger', 'aria-label': `Remover ${field.itemLabel.toLowerCase()}` }, 'Remover');
-        const entry = { handle, box };
+        const body = h('div', { class: 'item-body', id: `${key}-body`, hidden: true }, handle.el);
+        const box = h('div', { class: 'item', 'data-key': key }, h('div', { class: 'item-head' }, head, h('span', { class: 'item-actions' }, up, down, del)), body);
+        const entry: Entry = { key, handle, box, head, body, title, sub };
+        head.addEventListener('click', () => setOpen(body.hidden ? entry : null));
+        handle.el.addEventListener('input', () => describe(entry));
         up.addEventListener('click', () => move(entry, -1));
         down.addEventListener('click', () => move(entry, 1));
         del.addEventListener('click', () => {
+          const label = title.textContent || field.itemLabel;
+          if (!confirm(`Remover "${label}"?`)) return;
           items.splice(items.indexOf(entry), 1);
           box.remove();
           renumber();
           ctx.onChange();
         });
-        box.append(h('div', { class: 'item-head' }, h('span', { class: 'item-title' }), h('span', { class: 'item-actions' }, up, down, del)), handle.el);
         items.push(entry);
         listEl.append(box);
         renumber();
+        if (open) setOpen(entry);
       };
-      const move = (entry: { handle: FormHandle; box: HTMLElement }, dir: number) => {
+      const move = (entry: Entry, dir: number) => {
         const i = items.indexOf(entry);
         const j = i + dir;
         if (j < 0 || j >= items.length) return;
@@ -317,17 +354,29 @@ function control(field: Field, value: unknown, ctx: FormContext): Control {
         items.splice(j, 0, entry);
         listEl.replaceChildren(...items.map((x) => x.box));
         renumber();
+        entry.box.querySelector<HTMLButtonElement>(`[data-act="${dir < 0 ? 'up' : 'down'}"]`)?.focus();
         ctx.onChange();
       };
       for (const v of Array.isArray(value) ? (value as Values[]) : []) addItem(v);
       add.addEventListener('click', () => {
-        addItem(withDefaults(field.fields, {}, {}));
+        addItem(withDefaults(field.fields, {}, {}), true);
         ctx.onChange();
-        (listEl.lastElementChild?.querySelector('input, textarea, select') as HTMLElement | null)?.focus();
+        (items.at(-1)?.body.querySelector('input, textarea, select') as HTMLElement | null)?.focus();
       });
       wrap.append(h('p', { class: 'lbl' }, field.label), help ?? '', listEl, add, errorEl);
       read = () => items.map((x) => x.handle.read());
-      children = () => items.map((x, index) => ({ index, handle: x.handle }));
+      children = () =>
+        items.map((x, index) => ({
+          index,
+          handle: {
+            ...x.handle,
+            // Erro num item recolhido: abre esse item (o primeiro com erro) para mostrar o campo.
+            showErrors(errors: FieldError[], prefix: string) {
+              x.handle.showErrors(errors, prefix);
+              if (errors.some((e) => e.field.startsWith(`${prefix}.`)) && !items.some((o) => !o.body.hidden && o !== x && o.box.querySelector('.has-error'))) setOpen(x);
+            },
+          },
+        }));
       return { field, wrap, read, errorEl, children };
     }
   }

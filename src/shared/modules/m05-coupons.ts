@@ -29,16 +29,22 @@ export const coupons: ModuleDef = {
       titleKey: 'title',
       min: 0,
       max: 8,
+      summary: (c) => {
+        const day = (v: unknown) => (typeof v === 'string' && v ? new Date(Date.parse(v) - 3 * 3600_000).toISOString().slice(0, 10).split('-').reverse().slice(0, 2).join('/') : '');
+        const when = c.startsAt && c.endsAt ? `${day(c.startsAt)} a ${day(c.endsAt)}` : c.endsAt ? `até ${day(c.endsAt)}` : c.startsAt ? `a partir de ${day(c.startsAt)}` : 'sem data de fim';
+        const rule = c.firstPurchase ? 'só na 1ª compra' : String(c.conditions ?? '').split(/[.·;]/)[0]!.trim().slice(0, 48);
+        return [c.code || 'sem código', when, rule].filter(Boolean).join(' · ');
+      },
       fields: [
         { key: 'title', type: 'text', label: 'Título', max: 60, required: true },
         { key: 'description', type: 'text', label: 'Descrição curta', max: 140 },
         { key: 'code', type: 'code', label: 'Código do cupom', required: true },
         { key: 'conditions', type: 'text', label: 'Condições de uso', max: 240, required: true, multiline: true },
-        { key: 'startsAt', type: 'datetime', label: 'Início (opcional)' },
-        { key: 'endsAt', type: 'datetime', label: 'Fim (opcional)' },
-        { key: 'firstPurchase', type: 'toggle', label: 'Só para a primeira compra' },
-        { key: 'nearPrice', type: 'toggle', label: 'Mostrar selo perto do preço nos cards de produto' },
-        { key: 'badge', type: 'text', label: 'Texto do selo', max: 40, showWhen: { key: 'nearPrice', in: [true] }, required: true },
+        { key: 'startsAt', type: 'datetime', label: 'Início (opcional)', advanced: true },
+        { key: 'endsAt', type: 'datetime', label: 'Fim (opcional)', advanced: true },
+        { key: 'firstPurchase', type: 'toggle', label: 'Só para a primeira compra', advanced: true },
+        { key: 'nearPrice', type: 'toggle', label: 'Mostrar selo perto do preço nos cards de produto', advanced: true },
+        { key: 'badge', type: 'text', label: 'Texto do selo', max: 40, showWhen: { key: 'nearPrice', in: [true] }, required: true, advanced: true },
       ],
     },
     {
