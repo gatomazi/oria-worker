@@ -808,7 +808,7 @@ async function viewEditor(id: string): Promise<void> {
           { class: 'card stack' },
           h('div', { class: 'mod-head' }, h('div', {}, h('p', { class: 'code' }, def.code), h('h2', {}, def.name), h('p', { class: 'help' }, def.summary)), h('label', { class: 'switch big', for: 'mod-enabled' }, toggle, h('span', { class: 'switch-track', 'aria-hidden': 'true' }), h('span', {}, 'Ativo no rascunho'))),
           h('div', { class: 'now-row' }, h('span', { class: `pill ${live === 'on' ? 'on' : ''}` }, live === 'on' ? 'Ligado na loja' : live === 'off' ? 'Desligado na loja' : 'Nada publicado'), now, h('span', { class: 'help' }, live === 'none' ? 'Publique uma vez para poder ligar/desligar na hora.' : 'Liga ou desliga só este módulo na versão publicada, sem publicar o resto do rascunho.')),
-          def.integrations.length ? h('p', { class: 'help' }, `Depende de: ${def.integrations.join(', ')}.`) : null,
+          user?.role === 'operator' && def.integrations.length ? h('p', { class: 'help' }, `Depende de: ${def.integrations.join(', ')}.`) : null,
           form.el,
         ),
       );

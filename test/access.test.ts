@@ -101,8 +101,22 @@ test('lojista não altera integração, liberação, pacotes, acessos nem cria l
   assert.equal((await call(m, 'POST', '/api/stores/demo-aurora/users', { name: 'X', email: 'x@x.com' })).status, 403);
   assert.equal((await call(m, 'GET', '/api/stores/demo-aurora/install')).status, 403);
   // mas pode publicar a própria loja
-  const v = (await (await call(m, 'GET', '/api/stores/demo-aurora')).json()) as { draft: { updatedAt: string } };
-  assert.equal((await call(m, 'POST', '/api/stores/demo-aurora/publish', { expectedDraftUpdatedAt: v.draft.updatedAt })).status, 200);
+  const v = (await (await call(m, 'GET', '/api/stores/demo-aurora')).json()) as { draft: { config: unknown; updatedAt: string } };
+  const saved = await call(m, 'PUT', '/api/stores/demo-aurora/draft', { config: v.draft.config, expectedUpdatedAt: v.draft.updatedAt });
+  assert.equal(saved.status, 200);
+  const draftAt = ((await saved.json()) as { draft: { updatedAt: string } }).draft.updatedAt;
+  const published = await call(m, 'POST', '/api/stores/demo-aurora/publish', { expectedDraftUpdatedAt: draftAt });
+  assert.equal(published.status, 200);
+  const target = 'share';
+  assert.equal((await call(m, 'POST', `/api/stores/demo-aurora/modules/${target}/state`, { enabled: true })).status, 200, 'liga sem o operador');
+  const toggled = await call(m, 'POST', `/api/stores/demo-aurora/modules/${target}/state`, { enabled: false });
+  assert.equal(toggled.status, 200, 'desliga sem o operador');
+  // Nenhuma resposta de escrita devolve integração, notas internas ou origem técnica ao lojista.
+  for (const body of [await published.json(), await toggled.json()] as { store: Record<string, unknown> }[]) {
+    for (const k of ['integration', 'notes', 'devOrigin', 'devHost', 'extraModules']) assert.equal(body.store[k], undefined, k);
+  }
+  const back = (await (await call(m, 'GET', '/api/stores/demo-aurora')).json()) as { published: { config: { modules: Record<string, { enabled: boolean }> } } };
+  assert.equal(back.published.config.modules[target]!.enabled, false, 'publicado na hora');
 });
 
 test('CSRF, Origin e Host', async () => {

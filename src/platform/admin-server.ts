@@ -149,6 +149,8 @@ export function createAdminServer(deps: AdminDeps): Server {
     }
 
     const isOperator = user.role === 'operator';
+    // Toda resposta com a loja passa por aqui: o lojista nunca recebe integração nem notas internas.
+    const forRole = <T extends { store: Store }>(view: T) => (isOperator ? view : { ...view, store: merchantStoreView(view.store) });
     const operatorOnly = () => {
       if (!isOperator) throw new ServiceError(403, 'forbidden', 'Somente o operador pode fazer isso.');
     };
@@ -179,8 +181,7 @@ export function createAdminServer(deps: AdminDeps): Server {
     if (action === '' && method === 'GET') {
       const view = stores.view(store.id);
       return sendJson(res, 200, {
-        ...view,
-        store: isOperator ? view.store : merchantStoreView(view.store),
+        ...forRole(view),
         storeUrl: deps.storeUrl(store),
         media: deps.media.list(store.id),
         role: user.role,
@@ -192,20 +193,20 @@ export function createAdminServer(deps: AdminDeps): Server {
     }
     if (action === '/draft' && method === 'PUT') {
       const body = (await readJson(req)) as { config?: unknown; expectedUpdatedAt?: unknown };
-      return sendJson(res, 200, stores.saveDraft(store.id, body.config, body.expectedUpdatedAt, user.id));
+      return sendJson(res, 200, forRole(stores.saveDraft(store.id, body.config, body.expectedUpdatedAt, user.id)));
     }
     if (action === '/publish' && method === 'POST') {
       const body = (await readJson(req)) as { expectedDraftUpdatedAt?: unknown };
-      return sendJson(res, 200, stores.publish(store.id, body.expectedDraftUpdatedAt, user.id));
+      return sendJson(res, 200, forRole(stores.publish(store.id, body.expectedDraftUpdatedAt, user.id)));
     }
     if (action === '/restore' && method === 'POST') {
       const body = (await readJson(req)) as { version?: unknown };
-      return sendJson(res, 200, stores.restore(store.id, body.version, user.id));
+      return sendJson(res, 200, forRole(stores.restore(store.id, body.version, user.id)));
     }
     const stateMatch = /^\/modules\/([A-Za-z]{2,40})\/state$/.exec(action);
     if (stateMatch && method === 'POST') {
       const body = (await readJson(req)) as { enabled?: unknown };
-      return sendJson(res, 200, stores.setModuleState(store.id, stateMatch[1], body.enabled, user.id));
+      return sendJson(res, 200, forRole(stores.setModuleState(store.id, stateMatch[1], body.enabled, user.id)));
     }
     if (action === '/preview-token' && method === 'POST') {
       return sendJson(res, 200, { token: previewToken(deps.secret, store.id), storeUrl: deps.storeUrl(store) });
