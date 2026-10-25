@@ -2,10 +2,12 @@
 // (identidade, módulos, vídeos, publicação, restauração, prévia ao vivo).
 import '../shared/modules/index.ts';
 import { DEFAULT_IDENTITY, IDENTITY_FIELDS, type Identity } from '../shared/identity.ts';
-import { contrastRatio, type Field, type FieldError, type Values } from '../shared/fields.ts';
+import { contrastRatio, withDefaults, type Field, type FieldError, type Values } from '../shared/fields.ts';
+import type { IntegrationStatus, SiteCoupon } from '../platform/integration.ts';
 import { moduleDef, moduleDefs, parseStoreConfig, toPublicConfig, type StoreConfig, type Video } from '../shared/registry.ts';
 import { api, ApiError, setCsrf } from './api.ts';
 import { buildForm, h, type FormHandle } from './form.ts';
+import { list } from '../shared/modules/common.ts';
 
 // ------------------------------------------------------------------ tipos
 
@@ -543,7 +545,7 @@ async function viewPackages(): Promise<void> {
 
 // ----------------------------------------------------------------- editor
 
-type Section = { kind: 'module'; id: string } | { kind: 'identity' } | { kind: 'videos' } | { kind: 'history' };
+type Section = { kind: 'module'; id: string } | { kind: 'identity' } | { kind: 'videos' } | { kind: 'history' } | { kind: 'integration' };
 
 async function viewEditor(id: string): Promise<void> {
   let view = await api<StoreView>(`/api/stores/${id}`);
@@ -708,6 +710,7 @@ async function viewEditor(id: string): Promise<void> {
       opt('Identidade', 'identity', cur === 'identity'),
       opt(`Vídeos (${draft.library.videos.length})`, 'videos', cur === 'videos'),
       opt('Publicações', 'history', cur === 'history'),
+      opt('Integração com a INK', 'integration', cur === 'integration'),
       ...moduleDefs().map((d) => {
         const live = liveState(d.id);
         return opt(`${d.code} ${d.name}${view.entitled.includes(d.id) ? (live === 'on' ? ' · na loja' : '') : ' · não liberado'}`, `m:${d.id}`, cur === `m:${d.id}`, !view.entitled.includes(d.id));
@@ -726,6 +729,7 @@ async function viewEditor(id: string): Promise<void> {
       item('Identidade', { kind: 'identity' }),
       item('Vídeos', { kind: 'videos' }, [h('span', { class: 'chip' }, String(draft.library.videos.length))]),
       item('Publicações', { kind: 'history' }),
+      item('Integração', { kind: 'integration' }),
       h('p', { class: 'nav-group' }, 'Módulos'),
       ...mods,
     );
@@ -815,6 +819,8 @@ async function viewEditor(id: string): Promise<void> {
       if (def.id === 'reviews') void reviewsHelp(main);
     } else if (section.kind === 'videos') {
       renderVideos();
+    } else if (section.kind === 'integration') {
+      void renderIntegration();
     } else {
       renderHistory();
     }
@@ -919,6 +925,212 @@ async function viewEditor(id: string): Promise<void> {
       list,
       add,
     );
+  }
+
+  // ---- integração: o que já existe na INK pré-carrega os módulos
+  async function renderIntegration(): Promise<void> {
+    const box = h('div', { class: 'stack' }, h('p', { class: 'help' }, 'Carregando…'));
+    main.append(box);
+    let st: IntegrationStatus;
+    try {
+      st = await api<IntegrationStatus>(`/api/stores/${id}/integration`);
+    } catch (err) {
+      box.replaceChildren(h('p', { class: 'error-text' }, errorText(err)));
+      return;
+    }
+    if (section.kind !== 'integration') return;
+    const rerender = (next: IntegrationStatus) => {
+      st = next;
+      paint();
+    };
+
+    /** Muda as configurações de um módulo no rascunho (o lojista revisa, salva e publica). */
+    const editModule = (mid: string, fn: (settings: Values) => string) => {
+      const def = moduleDef(mid)!;
+      const cur = withDefaults(def.fields, def.defaults, draft.modules[mid]?.settings);
+      const msg = fn(cur);
+      draft.modules[mid] = { ...draft.modules[mid]!, settings: cur };
+      renderStatus();
+      pushPreview();
+      flash(`${msg} Está no rascunho: revise em ${def.code}, salve e publique.`);
+    };
+    const couponToCampaign = (c: SiteCoupon): Values => {
+      const progressive = c.rules.some((r) => /progressiva/i.test(r));
+      return {
+        title: (progressive ? 'Promoção progressiva' : c.off ? `${c.off}${c.firstPurchase ? ' na primeira compra' : ''}` : `Cupom ${c.code}`).slice(0, 60),
+        description: c.savings.slice(0, 140),
+        code: c.code,
+        conditions: (c.rules.join(' · ') || 'As condições são conferidas no carrinho da loja.').slice(0, 240),
+        startsAt: null,
+        endsAt: null,
+        firstPurchase: c.firstPurchase,
+        nearPrice: false,
+        badge: '',
+      };
+    };
+    const can = (mid: string) => view.entitled.includes(mid);
+
+    const paint = () => {
+      const data = st.site.data;
+      const syncBtn = h('button', { type: 'button', class: 'btn btn-primary' }, data ? 'Buscar de novo' : 'Buscar dados da loja');
+      syncBtn.addEventListener('click', () =>
+        void busy(syncBtn, 'Lendo a loja…', async () => {
+          try {
+            rerender(await api<IntegrationStatus>(`/api/stores/${id}/integration/sync`, { method: 'POST', json: {} }));
+            flash(st.site.error ? st.site.error : 'Dados da loja atualizados.', st.site.error ? 'error' : 'ok');
+          } catch (err) {
+            flash(errorText(err), 'error');
+          }
+        }),
+      );
+
+      const blocks: Node[] = [];
+      if (data) {
+        // Cupons
+        const camps = list(draft.modules.coupons?.settings.campaigns);
+        const missing = data.coupons.filter((c) => !camps.some((x) => String(x.code).toUpperCase() === c.code.toUpperCase()));
+        const addCoupons = h('button', { type: 'button', class: 'btn btn-small', disabled: !missing.length || !can('coupons') }, missing.length ? `Adicionar ${missing.length > 1 ? `os ${missing.length}` : 'ao'} M05 Cupons` : 'Já estão no M05');
+        addCoupons.addEventListener('click', () =>
+          editModule('coupons', (set) => {
+            const room = 6 - list(set.campaigns).length;
+            const add = missing.slice(0, Math.max(0, room));
+            set.campaigns = [...list(set.campaigns), ...add.map(couponToCampaign)];
+            paint();
+            return add.length < missing.length ? `${add.length} cupom(ns) adicionado(s); o M05 aceita até 6.` : `${add.length} cupom(ns) adicionado(s) ao M05.`;
+          }),
+        );
+        blocks.push(
+          h(
+            'section',
+            { class: 'card stack' },
+            h('div', { class: 'row-between' }, h('h3', {}, `Cupons que a INK mostra nos produtos (${data.coupons.length})`), data.coupons.length ? addCoupons : null),
+            data.coupons.length
+              ? h('ul', { class: 'int-list' }, ...data.coupons.map((c) => h('li', {}, h('code', {}, c.code), ' ', h('span', {}, [c.savings, ...c.rules].filter(Boolean).join(' · ')), h('span', { class: 'help' }, ` — visto em "${c.seenOn}"`))))
+              : h('p', { class: 'empty' }, 'Nenhum cupom apareceu nos produtos lidos.'),
+            h('p', { class: 'help' }, 'Entram como campanhas do M05 com o mesmo código e as regras escritas pela INK. A INK continua validando no carrinho. Para ler os cupons de cada produto na hora, ligue "Mostrar também os cupons cadastrados na INK" no M05.'),
+          ),
+        );
+        // Promoção progressiva
+        if (data.progressive.length) {
+          blocks.push(
+            h(
+              'section',
+              { class: 'card stack' },
+              h('h3', {}, 'Promoção progressiva'),
+              ...data.progressive.map((p) => {
+                const use = h('button', { type: 'button', class: 'btn btn-small', disabled: !can('cartIncentive') }, 'Usar no M06 Incentivo do carrinho');
+                use.addEventListener('click', () => {
+                  const cur = list(draft.modules.cartIncentive?.settings.tiers);
+                  if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do M06 pelas da promoção ${p.code}?`)) return;
+                  editModule('cartIncentive', (set) => {
+                    set.campaignName = p.code;
+                    set.measure = p.measure;
+                    set.tiers = p.tiers.map((t) => ({ threshold: t.threshold, benefit: t.benefit, amount: t.amount, label: t.label }));
+                    return `Faixas da promoção ${p.code} levadas ao M06.`;
+                  });
+                });
+                return h('div', { class: 'row-between' }, h('p', {}, h('code', {}, p.code), ' ', p.tiers.map((t) => `${t.threshold} peças: ${t.label}`).join(' · ')), use);
+              }),
+              h('p', { class: 'help' }, 'As faixas vêm do texto que a INK mostra no produto. O desconto continua sendo aplicado pela INK.'),
+            ),
+          );
+        }
+        // Assistente
+        const c = data.contacts;
+        const contactLine = [c.instagram && `Instagram @${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.facebook && `Facebook ${c.facebook}`, c.whatsapp && `WhatsApp ${c.whatsapp}`, c.email && c.email].filter(Boolean).join(' · ');
+        blocks.push(
+          h(
+            'section',
+            { class: 'card stack' },
+            h('h3', {}, `Respostas para o assistente (${data.faq.length + (data.about?.text ? 1 : 0)})`),
+            data.faq.length
+              ? h('details', {}, h('summary', {}, 'Ver as perguntas lidas'), h('ul', { class: 'int-list' }, ...data.faq.map((f) => h('li', {}, h('strong', {}, f.question), h('br'), h('span', { class: 'help' }, f.answer)))))
+              : h('p', { class: 'empty' }, 'A loja não tem perguntas frequentes publicadas na INK.'),
+            h('p', {}, h('strong', {}, 'Sobre: '), data.about?.text ? data.about.text.slice(0, 220) : 'página Sobre sem texto.'),
+            h('p', {}, h('strong', {}, 'Contatos: '), contactLine || 'nenhum encontrado nas páginas.'),
+            h('p', { class: 'help' }, 'O M10 Assistente usa isto sozinho quando "Responder também com o que a loja já publicou na INK" está ligado. O que você cadastrar na base de respostas do M10 prevalece.'),
+          ),
+        );
+        blocks.push(
+          h(
+            'details',
+            { class: 'card' },
+            h('summary', {}, `Páginas lidas (${data.pages.filter((p) => p.ok).length} de ${data.pages.length})`),
+            h('ul', { class: 'int-list' }, ...data.pages.map((p) => h('li', {}, h('span', { class: `pill ${p.ok ? 'on' : 'err'}` }, p.ok ? 'ok' : 'falhou'), ' ', p.label, p.detail ? ` — ${p.detail}` : ''))),
+          ),
+        );
+      }
+
+      // API da INK
+      const tokenIn = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', placeholder: st.api.configured ? 'Colar um token novo para trocar' : 'Cole aqui o token da API da INK', 'aria-label': 'Token da API da INK' });
+      const saveTok = h('button', { type: 'button', class: 'btn btn-small' }, 'Guardar token');
+      const testTok = h('button', { type: 'button', class: 'btn btn-small', disabled: !st.api.configured }, 'Testar conexão');
+      const delTok = h('button', { type: 'button', class: 'btn btn-small btn-danger', disabled: !st.api.configured }, 'Remover token');
+      saveTok.addEventListener('click', () =>
+        void busy(saveTok, 'Guardando…', async () => {
+          try {
+            rerender(await api<IntegrationStatus>(`/api/stores/${id}/integration/ink-token`, { method: 'PUT', json: { token: tokenIn.value } }));
+            flash('Token guardado. Teste a conexão.');
+          } catch (err) {
+            flash(errorText(err), 'error');
+          }
+        }),
+      );
+      testTok.addEventListener('click', () =>
+        void busy(testTok, 'Testando…', async () => {
+          try {
+            rerender(await api<IntegrationStatus>(`/api/stores/${id}/integration/ink-test`, { method: 'POST', json: {} }));
+            flash(st.api.testMessage ?? '', st.api.testOk ? 'ok' : 'error');
+          } catch (err) {
+            flash(errorText(err), 'error');
+          }
+        }),
+      );
+      delTok.addEventListener('click', () => {
+        if (!confirm('Remover o token da API da INK desta loja?')) return;
+        void busy(delTok, 'Removendo…', async () => {
+          try {
+            rerender(await api<IntegrationStatus>(`/api/stores/${id}/integration/ink-token`, { method: 'DELETE' }));
+            flash('Token removido.');
+          } catch (err) {
+            flash(errorText(err), 'error');
+          }
+        });
+      });
+      const a = st.api;
+      const apiCard = h(
+        'section',
+        { class: 'card stack' },
+        h('h2', {}, 'API da INK'),
+        h('p', { class: 'help' }, 'Para lojas com plano que dá acesso à API da INK. O token fica cifrado no servidor: não aparece de novo aqui e nunca vai para a loja.'),
+        h(
+          'div',
+          { class: 'now-row' },
+          h('span', { class: `pill ${a.testOk ? 'on' : a.testOk === false ? 'err' : ''}` }, !a.configured ? 'Sem token' : a.testOk ? 'Conectado' : a.testOk === false ? 'Falhou' : 'Não testado'),
+          h('span', { class: 'help' }, a.configured ? `Token terminado em …${a.hint}, guardado em ${when(a.setAt!)}.${a.testedAt ? ` ${a.testMessage} (${when(a.testedAt)})` : ''}` : 'Sem token: os dados vêm só da leitura da loja.'),
+        ),
+        h('div', { class: 'row' }, tokenIn, saveTok, testTok, delTok),
+        h('p', { class: 'help' }, h('strong', {}, 'Cupons e promoções pela API: ainda não. '), 'Não há rota conhecida da API da INK para listar cupons e promoções progressivas. Quando a INK confirmar uma (api@reserva.ink), a busca entra aqui. Até lá, eles vêm da leitura da loja acima ou do cadastro manual nos módulos.'),
+      );
+
+      box.replaceChildren(
+        h(
+          'section',
+          { class: 'card stack' },
+          h('div', { class: 'row-between' }, h('h2', {}, 'Dados lidos da loja'), syncBtn),
+          h('p', { class: 'help' }, 'O painel lê as páginas públicas da sua loja na INK (início, perguntas frequentes, trocas, sobre e alguns produtos) e pré-carrega os módulos. Nada é alterado na INK, e funciona em qualquer plano.'),
+          h(
+            'div',
+            { class: 'now-row' },
+            h('span', { class: `pill ${st.site.error ? 'warn' : data ? 'on' : ''}` }, st.site.error ? 'Última leitura falhou' : data ? 'Lido' : 'Ainda não lido'),
+            h('span', { class: 'help' }, [st.site.fetchedAt ? `Última leitura: ${when(st.site.fetchedAt)}. Renovada sozinha a cada 12 horas.` : 'Clique em buscar para ler a loja.', st.site.error ?? ''].filter(Boolean).join(' ')),
+          ),
+        ),
+        ...blocks,
+        apiCard,
+      );
+    };
+    paint();
   }
 
   function renderHistory(): void {

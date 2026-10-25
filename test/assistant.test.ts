@@ -23,7 +23,7 @@ function setupAssistant(opts: { enabled?: boolean; maxMessages?: number } = {}) 
   cfg.modules.assistant = { enabled: opts.enabled !== false, settings: { ...cfg.modules.assistant!.settings, knowledge: KB, maxMessages: opts.maxMessages ?? 15, whatsapp: '5561999990000' } };
   s.stores.saveDraft('demo-trilha', cfg, v.draft.updatedAt, null);
   s.stores.publish('demo-trilha', s.stores.view('demo-trilha').draft.updatedAt, null);
-  const a = new AssistantService({ stores: s.stores, catalog: s.catalog, db: s.db, secret: s.secret });
+  const a = new AssistantService({ stores: s.stores, catalog: s.catalog, db: s.db, secret: s.secret, integration: s.integration });
   return { s, a };
 }
 

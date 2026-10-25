@@ -35,10 +35,10 @@ export const assistant: ModuleDef = {
       key: 'knowledge',
       type: 'list',
       label: 'Base de respostas',
-      help: 'Só o que for oficial da loja. O assistente não inventa prazos nem políticas: sem resposta aqui, ele encaminha ao atendimento.',
+      help: 'Só o que for oficial da loja. O assistente não inventa prazos nem políticas: sem resposta, ele encaminha ao atendimento. O que estiver aqui prevalece sobre o lido da loja.',
       itemLabel: 'Resposta',
       titleKey: 'question',
-      min: 1,
+      min: 0,
       max: 40,
       fields: [
         { key: 'topic', type: 'select', label: 'Assunto', options: KNOWLEDGE_TOPICS },
@@ -46,6 +46,12 @@ export const assistant: ModuleDef = {
         { key: 'answer', type: 'text', label: 'Resposta', max: 600, required: true, multiline: true },
         { key: 'keywords', type: 'text', label: 'Palavras-chave (separadas por vírgula)', max: 160 },
       ],
+    },
+    {
+      key: 'storeData',
+      type: 'toggle',
+      label: 'Responder também com o que a loja já publicou na INK',
+      help: 'Perguntas frequentes, trocas e devoluções, sobre e redes sociais, lidas pela Integração e renovadas sozinhas a cada 12 horas.',
     },
     { key: 'productDiscovery', type: 'toggle', label: 'Buscar estampas, temas e coleções no catálogo da loja', help: 'Ex.: "tem estampa de vó?" traz as peças e a coleção correspondentes.' },
     { key: 'whatsapp', type: 'phone', label: 'WhatsApp do atendimento', help: 'Vazio = usa o WhatsApp cadastrado na loja.' },
@@ -81,6 +87,7 @@ export const assistant: ModuleDef = {
     greeting: 'Oi! Posso ajudar com entrega, trocas, medidas ou a encontrar uma peça.',
     suggestions: [],
     knowledge: [],
+    storeData: true,
     productDiscovery: true,
     whatsapp: '',
     contactLabel: 'Falar com a loja',
@@ -93,6 +100,10 @@ export const assistant: ModuleDef = {
     pages: ['home', 'listing', 'product'],
     devices: ['mobile', 'desktop'],
     accent: 'primary',
+  },
+  check(s) {
+    if (!list(s.knowledge).length && s.storeData !== true) return [{ field: 'knowledge', message: 'Assistente: cadastre ao menos uma resposta ou ligue as informações publicadas na loja.' }];
+    return [];
   },
   targets: (s) => targetsFrom(s, ['home']),
   // A base de respostas fica no servidor: a loja recebe só a identidade do assistente.

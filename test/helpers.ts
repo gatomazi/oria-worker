@@ -9,6 +9,7 @@ import { StoreService } from '../src/platform/stores.ts';
 import { MediaStore } from '../src/platform/media.ts';
 import { CatalogReader } from '../src/platform/catalog.ts';
 import { AssistantService } from '../src/platform/assistant.ts';
+import { IntegrationService } from '../src/platform/integration.ts';
 import { seed } from '../src/platform/seed.ts';
 import { loadSecret } from '../src/platform/tokens.ts';
 import '../src/shared/modules/index.ts';
@@ -21,11 +22,12 @@ export interface Stack {
   media: MediaStore;
   catalog: CatalogReader;
   assistant: AssistantService;
+  integration: IntegrationService;
   secret: Buffer;
   close(): void;
 }
 
-export function stack(opts: { fetchImpl?: typeof fetch; now?: () => Date; seedDemo?: boolean } = {}): Stack {
+export function stack(opts: { fetchImpl?: typeof fetch; apiFetch?: typeof fetch; now?: () => Date; seedDemo?: boolean } = {}): Stack {
   const dir = mkdtempSync(join(tmpdir(), 'pink-test-'));
   const db = openDb(dir);
   const secret = loadSecret(dir);
@@ -34,7 +36,8 @@ export function stack(opts: { fetchImpl?: typeof fetch; now?: () => Date; seedDe
   if (opts.seedDemo !== false) seed(stores);
   const media = new MediaStore(db, dir);
   const catalog = new CatalogReader(opts.fetchImpl);
-  const assistant = new AssistantService({ stores, catalog, db, secret });
+  const integration = new IntegrationService({ db, catalog, secret, fetchImpl: opts.apiFetch });
+  const assistant = new AssistantService({ stores, catalog, db, secret, integration });
   return {
     dir,
     db,
@@ -43,6 +46,7 @@ export function stack(opts: { fetchImpl?: typeof fetch; now?: () => Date; seedDe
     media,
     catalog,
     assistant,
+    integration,
     secret,
     close() {
       db.close();

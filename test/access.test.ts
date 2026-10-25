@@ -27,6 +27,7 @@ before(async () => {
     port,
     storeUrl: (x) => `http://${x.devHost}:8787${x.basePath}`,
     install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, probe: async () => ({ status: 200, body: '<html></html>' }) },
+    integration: s.integration,
   });
   await listen(admin, port);
   pub = createPublicServer({ stores: s.stores, media: s.media, secret: s.secret, assistant: s.assistant });
@@ -84,6 +85,10 @@ test('lojista só alcança a própria loja, em todas as rotas por loja', async (
     ['GET', '/api/stores/demo-trilha/catalog/sections'],
     ['GET', '/api/stores/demo-trilha/install'],
     ['GET', '/api/stores/demo-trilha/users'],
+    ['GET', '/api/stores/demo-trilha/integration'],
+    ['POST', '/api/stores/demo-trilha/integration/sync', {}],
+    ['PUT', '/api/stores/demo-trilha/integration/ink-token', { token: 'x'.repeat(30) }],
+    ['POST', '/api/stores/demo-trilha/integration/ink-test', {}],
   ];
   for (const [method, path, body] of routes) {
     assert.equal((await call(m, method, path, body)).status, 404, `${method} ${path}`);
@@ -188,4 +193,15 @@ test('ids e hosts: só o cadastro', async () => {
   assert.equal((await fetch(`${P}/api/v1/hosts/outra.localhost`)).status, 404);
   const h = (await (await fetch(`${P}/api/v1/hosts/demo-aurora.localhost`)).json()) as { storeId: string };
   assert.equal(h.storeId, 'demo-aurora');
+});
+
+test('integração: o lojista guarda o token da própria loja e ele nunca volta em resposta nenhuma', async () => {
+  const m = await login('aurora@exemplo.com', 'senha-da-aurora');
+  const token = 'tok_aurora_' + 'k'.repeat(30) + '_FIM9';
+  const put = await call(m, 'PUT', '/api/stores/demo-aurora/integration/ink-token', { token });
+  assert.equal(put.status, 200);
+  const bodies = [await put.text(), await (await call(m, 'GET', '/api/stores/demo-aurora/integration')).text(), await (await call(m, 'GET', '/api/stores/demo-aurora')).text()];
+  for (const b of bodies) assert.ok(!b.includes(token) && !b.includes('k'.repeat(30)), 'token não aparece');
+  assert.match(bodies[1]!, /"hint":"FIM9"/);
+  assert.equal((await call(m, 'DELETE', '/api/stores/demo-aurora/integration/ink-token')).status, 200);
 });

@@ -53,6 +53,17 @@ export const coupons: ModuleDef = {
     },
     { key: 'productTitle', type: 'text', label: 'Título das abas no produto', max: 40, showWhen: { key: 'productStyle', in: ['junto-preco'] } },
     {
+      key: 'cardBadge',
+      type: 'select',
+      label: 'Onde fica o selo nos cards de produto',
+      help: 'Vale para campanhas com "Mostrar selo perto do preço" ligado.',
+      options: [
+        { value: 'foto-esquerda', label: 'No topo da foto, à esquerda' },
+        { value: 'foto-direita', label: 'No topo da foto, à direita' },
+        { value: 'abaixo-preco', label: 'Abaixo do preço' },
+      ],
+    },
+    {
       key: 'inkCoupons',
       type: 'toggle',
       label: 'Mostrar também os cupons cadastrados na INK (página do produto)',
@@ -76,6 +87,7 @@ export const coupons: ModuleDef = {
     campaigns: [],
     productStyle: 'junto-preco',
     productTitle: 'Cupons para este produto',
+    cardBadge: 'foto-esquerda',
     inkCoupons: false,
     position: 'abaixo-cabecalho',
     pages: ['home', 'listing', 'product'],
@@ -119,6 +131,7 @@ export const coupons: ModuleDef = {
       inkCoupons: s.inkCoupons === true,
       productStyle: s.productStyle,
       productTitle: s.productTitle,
+      cardBadge: s.cardBadge,
       colors: color(ctx, s.background),
       accent: color(ctx, s.accent),
       campaigns: list(s.campaigns)

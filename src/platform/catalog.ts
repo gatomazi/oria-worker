@@ -35,6 +35,11 @@ export class CatalogReader {
     return value;
   }
 
+  /** Uma página da loja sem cache (leitura de integração). */
+  document(store: Store, path: string): Promise<Document> {
+    return this.page(store, path);
+  }
+
   sections(store: Store): Promise<{ label: string; path: string }[]> {
     return this.cached(`${store.id}:sections`, async () => parseStoreSections(await this.page(store, store.basePath || '/'), store.basePath));
   }

@@ -6,6 +6,7 @@ import { AssistantService } from './assistant.ts';
 import { Auth } from './auth.ts';
 import { CatalogReader } from './catalog.ts';
 import { openDb } from './db.ts';
+import { IntegrationService } from './integration.ts';
 import { MediaStore } from './media.ts';
 import { createPublicServer } from './public-server.ts';
 import { createReplayOrigin } from './replay-origin.ts';
@@ -34,7 +35,8 @@ const stores = new StoreService(db);
 seed(stores);
 const media = new MediaStore(db, DATA_DIR);
 const catalog = new CatalogReader();
-const assistant = new AssistantService({ stores, catalog, db, secret });
+const integration = new IntegrationService({ db, catalog, secret });
+const assistant = new AssistantService({ stores, catalog, db, secret, integration });
 const storeUrl = (s: { devHost: string; basePath: string }) => `http://${s.devHost}:${WORKER_PORT}${s.basePath}`;
 
 const servers: Server[] = [];
@@ -47,6 +49,7 @@ const admin = createAdminServer({
   port: ADMIN_PORT,
   storeUrl,
   install: { workerPort: WORKER_PORT, publicPort: PUBLIC_PORT, stores, auth },
+  integration,
 });
 await listen(admin, ADMIN_PORT, 'painel');
 servers.push(admin);

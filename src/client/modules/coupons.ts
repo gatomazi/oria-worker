@@ -86,6 +86,7 @@ const couponsModule: ClientModule = {
       inkCoupons?: boolean;
       productStyle?: string;
       productTitle?: string;
+      cardBadge?: 'foto-esquerda' | 'foto-direita' | 'abaixo-preco';
     };
     const { signal } = ctx;
     const now = Date.now();
@@ -192,7 +193,14 @@ const couponsModule: ClientModule = {
           b.style.lineHeight = '1.3';
           b.style.textAlign = 'center';
           b.style.overflowWrap = 'anywhere';
-          undo.insert(b, price.parentNode!, price.nextSibling);
+          // Sobre a foto: no canto de cima do quadro da imagem (a INK já o posiciona como relative).
+          const photo = s.cardBadge !== 'abaixo-preco' ? price.closest('.card-thumb')?.querySelector<HTMLElement>('.card-thumb__image-v2')?.parentElement : null;
+          if (photo) {
+            if (getComputedStyle(photo).position === 'static') undo.style(photo, 'position', 'relative');
+            const side = s.cardBadge === 'foto-direita' ? 'right' : 'left';
+            b.style.cssText += `;position:absolute;top:8px;${side}:8px;z-index:1;margin:0;max-width:calc(100% - 16px);text-align:${side};box-shadow:0 1px 4px rgba(0,0,0,.18);pointer-events:none`;
+            undo.insert(b, photo, null);
+          } else undo.insert(b, price.parentNode!, price.nextSibling);
         });
         if (ctx.page === 'product' && productBadge && !compact) {
           const spot = belowPrice();

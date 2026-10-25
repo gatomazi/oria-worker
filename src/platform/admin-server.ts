@@ -13,6 +13,7 @@ import { ServiceError, type StoreService, type Store } from './stores.ts';
 import type { CatalogReader } from './catalog.ts';
 import { previewToken } from './tokens.ts';
 import { installArtifacts, installStatus, type InstallContext } from './install.ts';
+import type { IntegrationService } from './integration.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -26,6 +27,7 @@ export interface AdminDeps {
   /** Endereço local da loja via Worker (ex.: http://loja.localhost:8787). */
   storeUrl: (s: Store) => string;
   install: InstallContext;
+  integration: IntegrationService;
 }
 
 function cookies(req: IncomingMessage): Record<string, string> {
@@ -222,6 +224,25 @@ export function createAdminServer(deps: AdminDeps): Server {
       return sendJson(res, 201, saved);
     }
     if (action.startsWith('/catalog/') && method === 'GET') return catalogRoute(res, store, action, url);
+
+    // Integração: operador e lojista da própria loja. O token nunca volta ao painel.
+    if (action === '/integration' && method === 'GET') return sendJson(res, 200, deps.integration.status(store.id));
+    if (action === '/integration/sync' && method === 'POST') {
+      const status = await deps.integration.syncSite(store);
+      stores.audit(user.id, store.id, 'integration.sync', status.site.error ?? 'ok');
+      return sendJson(res, 200, status);
+    }
+    if (action === '/integration/ink-token' && method === 'PUT') {
+      const body = (await readJson(req)) as { token?: unknown };
+      const status = deps.integration.setToken(store, body.token, user.id);
+      stores.audit(user.id, store.id, 'integration.token.set', `…${status.api.hint}`);
+      return sendJson(res, 200, status);
+    }
+    if (action === '/integration/ink-token' && method === 'DELETE') {
+      stores.audit(user.id, store.id, 'integration.token.clear');
+      return sendJson(res, 200, deps.integration.clearToken(store));
+    }
+    if (action === '/integration/ink-test' && method === 'POST') return sendJson(res, 200, await deps.integration.testApi(store));
 
     // ------------------------------------------------ só operador
     if (action === '/users' && method === 'GET') {

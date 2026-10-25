@@ -311,3 +311,100 @@ export function parseReviewImage(root: ParentNode): { imageUrl: string; author: 
     products,
   };
 }
+
+// ------------------------------------------------------------------ páginas institucionais
+
+export interface FaqItem {
+  question: string;
+  answer: string;
+}
+
+/** Perguntas e respostas das páginas da INK (/faq, /exchanges_and_returns): `main details > summary` + texto. */
+export function parseFaq(root: ParentNode): FaqItem[] {
+  const out: FaqItem[] = [];
+  root.querySelectorAll('main details').forEach((d) => {
+    const summary = d.querySelector('summary');
+    const question = text(summary).slice(0, 160);
+    const answer = [...d.childNodes]
+      .filter((n) => n !== summary)
+      .map((n) => n.textContent ?? '')
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\s+-(\S)/g, '-$1')
+      .trim()
+      .slice(0, 900);
+    if (question.length >= 4 && answer.length >= 4 && !out.some((x) => x.question === question)) out.push({ question, answer });
+  });
+  return out;
+}
+
+/** Texto da página "Sobre" (/about). Vazio quando a loja não escreveu nada. */
+export function parseAbout(root: ParentNode): { name: string; text: string } | null {
+  const box = root.querySelector('.about__text');
+  if (!box) return null;
+  const body = [...box.querySelectorAll('p')].map((p) => text(p)).filter(Boolean).join('\n').slice(0, 900);
+  return { name: text(box.querySelector('.name')).slice(0, 80), text: body };
+}
+
+export interface StoreContacts {
+  instagram?: string;
+  facebook?: string;
+  tiktok?: string;
+  /** Só dígitos, com DDI. */
+  whatsapp?: string;
+  email?: string;
+}
+
+/** Contatos públicos que a loja colocou nas páginas (redes, WhatsApp, e-mail). */
+export function parseContacts(root: ParentNode): StoreContacts {
+  const c: StoreContacts = {};
+  root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((a) => {
+    const href = a.getAttribute('href') ?? '';
+    let u: URL;
+    try {
+      u = new URL(href, 'https://loja.invalid');
+    } catch {
+      return;
+    }
+    const host = u.hostname.replace(/^www\./, '');
+    const first = u.pathname.split('/').filter(Boolean)[0] ?? '';
+    if (host === 'instagram.com' && /^[\w.]{2,40}$/.test(first)) c.instagram ??= first;
+    else if (host === 'facebook.com' && /^[\w.-]{2,60}$/.test(first)) c.facebook ??= first;
+    else if (host === 'tiktok.com' && /^@[\w.]{2,40}$/.test(first)) c.tiktok ??= first;
+    else if (host === 'wa.me' || host === 'api.whatsapp.com') {
+      const digits = (host === 'wa.me' ? first : (u.searchParams.get('phone') ?? '')).replace(/\D/g, '');
+      if (digits.length >= 10 && digits.length <= 15) c.whatsapp ??= digits;
+    } else if (u.protocol === 'mailto:') {
+      const mail = decodeURIComponent(u.pathname).trim();
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) c.email ??= mail;
+    }
+  });
+  return c;
+}
+
+export interface ProgressiveTier {
+  threshold: number;
+  benefit: 'percentual' | 'valor';
+  amount: number;
+  label: string;
+}
+
+/**
+ * Faixas de uma promoção progressiva da INK, como ela escreve no produto:
+ * "Promoção progressiva" + "2 itens - R$20,00 OFF" / "3 itens - 15% OFF".
+ * null quando o cupom não é progressivo ou alguma faixa não é legível.
+ */
+export function progressiveTiers(c: Pick<NativeCoupon, 'rules'>): { measure: 'itens'; tiers: ProgressiveTier[] } | null {
+  if (!c.rules.some((r) => /promo[cç][aã]o progressiva/i.test(r))) return null;
+  const tiers: ProgressiveTier[] = [];
+  for (const r of c.rules) {
+    const m = /^(\d{1,3})\s*(?:itens?|pe[cç]as?)\s*[-–:]\s*(R\$\s?[\d.]+(?:,\d{1,2})?|\d{1,2}(?:[.,]\d{1,2})?\s?%)\s*OFF/i.exec(r.trim());
+    if (!m) continue;
+    const isPct = m[2]!.includes('%');
+    const amount = isPct ? Number(m[2]!.replace(/[%\s]/g, '').replace(',', '.')) : (parseBrl(m[2]!) ?? NaN) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    tiers.push({ threshold: Number(m[1]), benefit: isPct ? 'percentual' : 'valor', amount, label: `${m[2]!.replace(/\s+/g, '')} OFF` });
+  }
+  tiers.sort((a, b) => a.threshold - b.threshold);
+  return tiers.length ? { measure: 'itens', tiers: tiers.slice(0, 4) } : null;
+}

@@ -99,6 +99,26 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (store_id, day)
   );
   `,
+  // Integração: o que foi lido da loja (pré-carregamento) e o token da API da INK, cifrado.
+  `
+  CREATE TABLE store_sync (
+    store_id TEXT PRIMARY KEY REFERENCES stores(id),
+    data TEXT,
+    fetched_at TEXT,
+    error TEXT,
+    error_at TEXT
+  );
+  CREATE TABLE ink_api (
+    store_id TEXT PRIMARY KEY REFERENCES stores(id),
+    token_enc TEXT NOT NULL,
+    token_hint TEXT NOT NULL,
+    set_at TEXT NOT NULL,
+    set_by INTEGER,
+    tested_at TEXT,
+    test_ok INTEGER,
+    test_message TEXT
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

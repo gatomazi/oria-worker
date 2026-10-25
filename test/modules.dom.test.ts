@@ -157,6 +157,22 @@ test('M05 (produto em "bloco"): abas de campanhas, selo de 1ª compra perto do p
   assert.doesNotMatch(root.textContent ?? '', /aplicad/i);
 });
 
+test('M05: selo nos cards no topo da foto (esquerda por padrão, direita) ou abaixo do preço', async () => {
+  for (const [place, check] of [
+    [undefined, (b: HTMLElement) => b.parentElement!.querySelector('.card-thumb__image-v2') !== null && b.style.left === '8px'],
+    ['foto-direita', (b: HTMLElement) => b.parentElement!.querySelector('.card-thumb__image-v2') !== null && b.style.right === '8px'],
+    ['abaixo-preco', (b: HTMLElement) => b.previousElementSibling?.classList.contains('card-thumb__prices-v2') === true],
+  ] as const) {
+    const cfg = configWith({ coupons: { pages: ['home'], ...(place ? { cardBadge: place } : {}), campaigns: [coupon({ code: 'PRIMEIRA10', nearPrice: true, badge: '10% na 1ª compra' })] } });
+    const env = setup(HOME, '/vistaentrenos', cfg);
+    env.run();
+    await env.mountedAfter();
+    const badges = [...env.document.querySelectorAll<HTMLElement>('.card-thumb [data-pink-badge]')];
+    assert.ok(badges.length > 0, `${place}: há selos`);
+    assert.ok(badges.every(check), `${place ?? 'padrão'}: posição`);
+  }
+});
+
 test('M05: no produto, abas compactas logo abaixo do preço — uma por código, teclado, copiar', async () => {
   const cfg = configWith({
     coupons: {

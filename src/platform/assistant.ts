@@ -1,5 +1,6 @@
 // Assistente da loja (M10): básico e previsível, sem IA.
-//  - Dúvidas de atendimento: respostas da base cadastrada pela loja.
+//  - Dúvidas de atendimento: respostas da base cadastrada pela loja e, se ligado, as que a
+//    própria loja publicou na INK (FAQ, trocas, sobre, redes), lidas pela integração.
 //  - Procura por estampa/tema/peça: produtos do catálogo da própria loja
 //    (busca nativa da INK) e as coleções cujo nome casa com a pergunta.
 //  - Pedido/rastreio: encaminha ao canal nativo da INK.
@@ -9,6 +10,7 @@ import type { CardProduct } from '../shared/ink-parse.ts';
 import type { CatalogReader } from './catalog.ts';
 import type { Store, StoreService } from './stores.ts';
 import type { Db } from './db.ts';
+import type { IntegrationService, SiteData } from './integration.ts';
 import { verifyPreviewToken } from './tokens.ts';
 
 export interface AssistantReply {
@@ -63,7 +65,7 @@ export function rankKnowledge(question: string, kb: Knowledge[]): { item: Knowle
       for (const t of q) {
         if (kw.has(t)) score += 3;
         if (qq.has(t)) score += 2;
-        if (aa.has(t)) score += 0.5;
+        if (aa.has(t)) score += 1;
         else if ([...kw, ...qq].some((w) => w.length > 3 && t.length > 3 && (w.startsWith(t.slice(0, 4)) || t.startsWith(w.slice(0, 4))))) score += 1;
       }
       return { item, score: score / Math.sqrt(q.size) };
@@ -118,12 +120,14 @@ export class AssistantService {
   private catalog: CatalogReader;
   private db: Db;
   private secret: Buffer;
+  private integration: IntegrationService | null;
 
-  constructor(deps: { stores: StoreService; catalog: CatalogReader; db: Db; secret: Buffer }) {
+  constructor(deps: { stores: StoreService; catalog: CatalogReader; db: Db; secret: Buffer; integration?: IntegrationService }) {
     this.stores = deps.stores;
     this.catalog = deps.catalog;
     this.db = deps.db;
     this.secret = deps.secret;
+    this.integration = deps.integration ?? null;
   }
 
   async answer(storeId: string, raw: unknown): Promise<AssistantReply> {
@@ -144,7 +148,10 @@ export class AssistantService {
     const key = `${storeId}:${sessionId}`;
     const sess = this.sessions.get(key) ?? { count: 0, at: now };
     const max = Number(settings.maxMessages ?? 15);
-    const contact = this.contact(store.integration.supportWhatsapp, String(settings.whatsapp ?? ''), String(settings.contactLabel ?? 'Falar com a loja'));
+    const useSite = settings.storeData !== false && !!this.integration;
+    if (useSite) this.integration!.refreshIfStale(store);
+    const site = useSite ? this.integration!.siteData(store.id) : null;
+    const contact = this.contact(store.integration.supportWhatsapp || site?.contacts.whatsapp || '', String(settings.whatsapp ?? ''), String(settings.contactLabel ?? 'Falar com a loja'));
     if (sess.count >= max) {
       return { status: 429, body: { error: 'limit', answer: 'Chegamos ao limite de perguntas desta visita. Para continuar, fale com a loja.', contact, remaining: 0 } };
     }
@@ -170,7 +177,8 @@ export class AssistantService {
       return reply({ answer: 'Você acompanha o pedido pela página de rastreio da loja, com o número do pedido e o e-mail da compra.', link: { label: 'Rastrear pedido', path: `${store.basePath}/orders/trackings` } });
     }
 
-    const kb = (Array.isArray(settings.knowledge) ? settings.knowledge : []) as Knowledge[];
+    // O que a loja cadastrou no painel vem primeiro: no empate, prevalece sobre o lido da INK.
+    const kb = [...((Array.isArray(settings.knowledge) ? settings.knowledge : []) as Knowledge[]), ...siteKnowledge(site)];
     const ranked = rankKnowledge(message, kb).slice(0, 3);
     const strongAnswer = ranked.length > 0 && ranked[0]!.score >= 3;
 
@@ -241,6 +249,18 @@ export class AssistantService {
     const phone = moduleWhats || storeWhats;
     return phone ? { label, url: `https://wa.me/${phone}` } : null;
   }
+}
+
+/** Respostas montadas com o que a loja publicou nas páginas da INK. */
+export function siteKnowledge(site: SiteData | null): Knowledge[] {
+  if (!site) return [];
+  const out: Knowledge[] = site.faq.map((f) => ({ topic: f.page === 'trocas' ? 'trocas' : 'loja', question: f.question, answer: f.answer, keywords: f.page === 'trocas' ? 'troca, trocar, devolução, devolver' : '' }));
+  if (site.about?.text) out.push({ topic: 'loja', question: `Sobre a ${site.about.name || 'loja'}`, answer: site.about.text, keywords: 'sobre, quem, história, marca, loja' });
+  const c = site.contacts;
+  const social = [c.instagram && `Instagram: @${c.instagram}`, c.tiktok && `TikTok: ${c.tiktok}`, c.facebook && `Facebook: ${c.facebook}`].filter(Boolean);
+  if (social.length) out.push({ topic: 'atendimento', question: 'Redes sociais da loja', answer: `${social.join(' · ')}.`, keywords: 'instagram, insta, redes, sociais, tiktok, facebook, perfil' });
+  if (c.email) out.push({ topic: 'atendimento', question: 'E-mail da loja', answer: `O e-mail da loja é ${c.email}.`, keywords: 'email, e-mail, contato, falar' });
+  return out;
 }
 
 function toPublicProduct(p: CardProduct) {
