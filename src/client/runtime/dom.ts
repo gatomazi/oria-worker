@@ -49,7 +49,10 @@ export function themeCss(theme: Theme): string {
   font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box}
 button{font:inherit;cursor:pointer}
-button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--pk-primary);outline-offset:2px}
+button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--pk-primary);outline-offset:2px}
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pk-primary);outline-offset:0;border-color:var(--pk-primary)}
+input,textarea{caret-color:var(--pk-primary)}
+::selection{background:color-mix(in srgb,var(--pk-primary) 22%,transparent)}
 [hidden]{display:none!important}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-height:44px;padding:10px 18px;border:0;border-radius:var(--pk-btn-radius);font-weight:700;font-size:15px;line-height:1.2;transition:filter .15s ease;text-decoration:none}

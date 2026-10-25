@@ -193,13 +193,19 @@ const couponsModule: ClientModule = {
           b.style.lineHeight = '1.3';
           b.style.textAlign = 'center';
           b.style.overflowWrap = 'anywhere';
-          // Sobre a foto: no canto de cima do quadro da imagem (a INK já o posiciona como relative).
-          const photo = s.cardBadge !== 'abaixo-preco' ? price.closest('.card-thumb')?.querySelector<HTMLElement>('.card-thumb__image-v2')?.parentElement : null;
-          if (photo) {
-            if (getComputedStyle(photo).position === 'static') undo.style(photo, 'position', 'relative');
+          // Vitrines com 4 cards lado a lado no celular (~80 px): não cabe selo legível. Fica de fora.
+          const card = price.closest<HTMLElement>('.card-thumb');
+          const cardW = card?.getBoundingClientRect().width ?? 0;
+          if (cardW > 0 && cardW < 120) return;
+          // Sobre a foto: no canto de cima do quadro da imagem (a INK já o posiciona como relative),
+          // numa linha só. Quadro sem largura (vitrine que a INK esconde no celular) → abaixo do preço.
+          const frame = s.cardBadge !== 'abaixo-preco' ? card?.querySelector<HTMLElement>('.card-thumb__image-v2')?.parentElement : null;
+          const frameW = frame?.getBoundingClientRect().width ?? 0;
+          if (frame && (frameW === 0 ? cardW === 0 : frameW >= 120)) {
+            if (getComputedStyle(frame).position === 'static') undo.style(frame, 'position', 'relative');
             const side = s.cardBadge === 'foto-direita' ? 'right' : 'left';
-            b.style.cssText += `;position:absolute;top:8px;${side}:8px;z-index:1;margin:0;max-width:calc(100% - 16px);text-align:${side};box-shadow:0 1px 4px rgba(0,0,0,.18);pointer-events:none`;
-            undo.insert(b, photo, null);
+            b.style.cssText += `;position:absolute;top:8px;${side}:8px;z-index:1;margin:0;max-width:calc(100% - 16px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.16),0 4px 12px rgba(0,0,0,.08);pointer-events:none`;
+            undo.insert(b, frame, null);
           } else undo.insert(b, price.parentNode!, price.nextSibling);
         });
         if (ctx.page === 'product' && productBadge && !compact) {

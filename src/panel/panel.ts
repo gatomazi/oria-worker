@@ -175,7 +175,7 @@ function viewLogin(): void {
   const form = h(
     'form',
     { class: 'card auth' },
-    h('h1', {}, 'Entrar no painel'),
+    h('div', { class: 'auth-head' }, h('p', { class: 'auth-brand' }, 'Oria'), h('h1', {}, 'Entrar no painel'), h('p', { class: 'help' }, 'Personalizações da sua loja Reserva INK.')),
     h('div', { class: 'field' }, h('label', { for: 'login-email' }, 'E-mail'), email),
     h('div', { class: 'field' }, h('label', { for: 'login-pass' }, 'Senha'), pass),
     err,
@@ -597,7 +597,7 @@ async function viewEditor(id: string): Promise<void> {
     'div',
     { class: 'editor-head' },
     h('div', {}, crumbs(...(user?.role === 'operator' ? [['Lojas', '#/lojas'] as [string, string]] : []), view.store.name), h('h1', {}, view.store.name), statusLive, statusDraft),
-    h('div', { class: 'head-actions' }, user?.role === 'operator' ? h('a', { class: 'btn btn-quiet', href: `#/lojas/${id}/operacao` }, 'Operação') : null, h('a', { class: 'btn btn-quiet', href: view.storeUrl, target: '_blank', rel: 'noopener' }, 'Abrir loja ↗'), saveBtn, pubBtn),
+    h('div', { class: 'head-actions' }, user?.role === 'operator' ? h('a', { class: 'btn btn-quiet', href: `#/lojas/${id}/operacao` }, 'Operação') : null, h('a', { class: 'btn btn-quiet', href: view.storeUrl, target: '_blank', rel: 'noopener' }, 'Abrir loja ↗'), h('div', { class: 'head-primary' }, saveBtn, pubBtn)),
   );
   const previewPane = h(
     'aside',
@@ -811,7 +811,7 @@ async function viewEditor(id: string): Promise<void> {
         h(
           'section',
           { class: 'card stack' },
-          h('div', { class: 'mod-head' }, h('div', {}, h('p', { class: 'code' }, def.code), h('h2', {}, def.name), h('p', { class: 'help' }, def.summary)), h('label', { class: 'switch big', for: 'mod-enabled' }, toggle, h('span', { class: 'switch-track', 'aria-hidden': 'true' }), h('span', {}, 'Ativo no rascunho'))),
+          h('div', { class: 'mod-head' }, h('div', { class: 'mod-title' }, h('h2', {}, h('span', { class: 'code' }, def.code), def.name), h('p', { class: 'help' }, def.summary)), h('label', { class: 'switch big', for: 'mod-enabled' }, toggle, h('span', { class: 'switch-track', 'aria-hidden': 'true' }), h('span', {}, 'Ativo no rascunho'))),
           h('div', { class: 'now-row' }, h('span', { class: `pill ${live === 'on' ? 'on' : ''}` }, live === 'on' ? 'Ligado na loja' : live === 'off' ? 'Desligado na loja' : 'Nada publicado'), now, h('span', { class: 'help' }, live === 'none' ? 'Publique uma vez para poder ligar/desligar na hora.' : 'Liga ou desliga só este módulo na versão publicada, sem publicar o resto do rascunho.')),
           user?.role === 'operator' && def.integrations.length ? h('p', { class: 'help' }, `Depende de: ${def.integrations.join(', ')}.`) : null,
           form.el,
