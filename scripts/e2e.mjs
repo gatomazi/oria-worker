@@ -116,7 +116,7 @@ try {
 
   await panel.fill('#u-name', 'Lojista Vista');
   await panel.fill('#u-email', 'lojista@vistaentrenos.com.br');
-  await panel.click('button:has-text("Criar acesso e gerar convite")');
+  await panel.click('button:has-text("Criar acesso e enviar convite")');
   await panel.waitForSelector('.invite-out input');
   const inviteUrl = await panel.inputValue('.invite-out input');
   check('Convite do lojista gerado', /#\/convite\//.test(inviteUrl));
@@ -128,9 +128,35 @@ try {
   await ed.goto(inviteUrl);
   await ed.fill('#inv-pass', 'senha-do-lojista-vista');
   await ed.click('button[type=submit]');
-  await ed.waitForURL(/#\/lojas\/vista-entre-nos$/, { timeout: 15000 });
+  // Loja nova, nada publicado: o lojista começa pela configuração guiada.
+  await ed.waitForURL(/#\/lojas\/vista-entre-nos\/configurar$/, { timeout: 15000 });
+  check('Lojista aceita o convite e começa pela configuração guiada da própria loja', true);
+  await ed.click('.setup-body button:has-text("Ler a loja agora")');
+  await ed.waitForSelector('.found li', { timeout: 90000 });
+  const foundOk = await ed.locator('.found li.ok').allTextContents();
+  check('Configuração guiada: leitura da loja real (logo, cores, menu, FAQ)', foundOk.length >= 4, foundOk.map((t) => t.split(/\s{2,}|(?<=[a-z])(?=[A-Z])/)[0]).join(', ').slice(0, 120));
+  await ed.screenshot({ path: `${SHOTS}/r3-configuracao-1-ler.png`, fullPage: true });
+  await ed.click('.setup-foot button:has-text("Continuar")');
+  await ed.waitForSelector('.offers, .setup-body .empty');
+  // Aplica só o assistente com o FAQ (as abas o roteiro monta à mão no editor).
+  for (const box of await ed.locator('.offer-main input').all()) await box.setChecked(false);
+  await ed.locator('.offer:has-text("Assistente com o que a loja publicou") .offer-main input').check();
+  await ed.click('button:has-text("Aplicar os selecionados")');
+  check('Configuração guiada: conteúdo importado com origem vai para o rascunho', /Aplicado no rascunho/.test(await (async () => { await ed.waitForFunction(() => /Aplicado|exceto/.test(document.getElementById('flash')?.textContent ?? ''), null, { timeout: 30000 }); return ed.textContent('#flash'); })()));
+  await ed.screenshot({ path: `${SHOTS}/r3-configuracao-2-conteudo.png`, fullPage: true });
+  await ed.click('.setup-foot button:has-text("Continuar")');
+  await ed.waitForSelector('.presets');
+  await ed.click('.preset:has-text("Navegação e descoberta") button:has-text("Escolher este conjunto")');
+  const pendingFeats = await ed.locator('.feat.pending').count();
+  await ed.screenshot({ path: `${SHOTS}/r3-configuracao-3-recursos.png`, fullPage: true });
+  await ed.click('.setup-foot button:has-text("Continuar")');
+  await ed.waitForSelector('.review');
+  const goingLive = await ed.locator('.review .card > ul.int-list > li').allTextContents();
+  check('Configuração guiada: só recursos prontos vão para a loja; pendentes ficam de fora', goingLive.includes('Cabeçalho, menu e busca') && !goingLive.some((t) => /Cupons/.test(t)) && pendingFeats > 0, `${goingLive.length} prontos, ${pendingFeats} pendentes`);
+  await ed.waitForTimeout(3000);
+  await ed.screenshot({ path: `${SHOTS}/r3-configuracao-4-conferir.png`, fullPage: true });
+  await ed.goto(`${PANEL}#/lojas/vista-entre-nos`);
   await ed.waitForSelector('.nav-item');
-  check('Lojista aceita o convite e cai direto na própria loja', true);
   const navTexts = await ed.locator('.nav-item').allTextContents();
   check('Recursos não liberados aparecem bloqueados (lojista vê nomes, sem códigos)', navTexts.some((t) => /Cards de vídeos.*não liberado/.test(t)) && navTexts.some((t) => /Cupons em destaque/.test(t) && !/não liberado/.test(t)) && !navTexts.some((t) => /\bM\d\d\b/.test(t)));
 
@@ -186,6 +212,13 @@ try {
   await ed.click('.head-actions button:has-text("Publicar")');
   const published = await edFlash(/publicada|Não publicado/);
   check('Publicar', /Versão 1 publicada/.test(published), published);
+  await ed.goto(`${PANEL}#/lojas/vista-entre-nos/configurar`);
+  await ed.click('.stepper li:nth-child(4) .step');
+  await ed.click('button:has-text("Concluir configuração")');
+  await ed.waitForSelector('.setup-done', { timeout: 15000 });
+  check('Lojista conclui a configuração guiada (reabrir não reinicia)', true);
+  await ed.goto(`${PANEL}#/lojas/vista-entre-nos`);
+  await ed.waitForSelector('.nav-item');
 
   // ---------------------------------------------------------------- loja real pelo proxy
   const shop = await newCtx(DESKTOP);

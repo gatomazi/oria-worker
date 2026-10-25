@@ -29,7 +29,8 @@
     "check": "npm run typecheck && npm test",
     "start": "node src/platform/main.ts",
     "backup": "node scripts/backup.mjs",
-    "restore": "node scripts/restore.mjs"
+    "restore": "node scripts/restore.mjs",
+    "check:api": "node scripts/check-api.mjs"
   },
   "dependencies": {
     "jsdom": "^30.1.3"
