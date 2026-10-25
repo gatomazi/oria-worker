@@ -168,6 +168,25 @@ test('M05 (produto em "bloco"): abas de campanhas, selo de 1ª compra perto do p
   assert.doesNotMatch(root.textContent ?? '', /aplicad/i);
 });
 
+test('M05: cupom compacto no celular (uma linha: título, código, copiar; condições ao abrir); computador mantém o bloco', async () => {
+  const cfg = configWith({ coupons: { pages: ['home'], styleMobile: 'compacto', campaigns: [coupon({ code: 'PRIMEIRA10', description: 'Só em produtos selecionados.' })] } });
+  const mob = setup(HOME, '/vistaentrenos', cfg, { mobile: true });
+  mob.run();
+  await mob.mountedAfter();
+  const root = mob.shadow('coupons')!;
+  const card = root.querySelector('.card.compact')!;
+  assert.ok(card, 'compacto no celular');
+  assert.equal(card.querySelector('.c-line .code')!.textContent, 'PRIMEIRA10');
+  assert.equal(card.querySelector('.c-line .copy')!.textContent, 'Copiar');
+  const more = card.querySelector('details.c-more')!;
+  assert.equal(more.hasAttribute('open'), false, 'condições recolhidas');
+  assert.match(more.textContent ?? '', /Só em produtos selecionados/, 'alcance acessível nas condições');
+  const desk = setup(HOME, '/vistaentrenos', cfg);
+  desk.run();
+  await desk.mountedAfter();
+  assert.equal(desk.shadow('coupons')!.querySelector('.card.compact'), null, 'computador: bloco completo');
+});
+
 test('M05: selo nos cards no topo da foto (esquerda por padrão, direita) ou abaixo do preço', async () => {
   for (const [place, check] of [
     [undefined, (b: HTMLElement) => b.parentElement!.querySelector('.card-thumb__image-v2') !== null && b.style.left === '8px'],
@@ -492,6 +511,28 @@ test('M10: abre, pergunta ao servidor e mostra produtos e atendimento', async ()
   const sent = JSON.parse(env.posts.find((p) => p.url === '/__pink/assistant')!.body);
   assert.equal(sent.message, 'Qual o prazo?');
   assert.match(sent.sessionId, /^[a-f0-9]{24}$/);
+});
+
+test('M10: entrada única de atendimento — atalhos da ajuda nativa dentro do assistente; desligar devolve o botão', async () => {
+  const env = setup(HOME, '/vistaentrenos', configWith({ assistant: { knowledge: [{ topic: 'entrega', question: 'Prazo?', answer: 'x', keywords: '' }] } }));
+  const native = env.document.querySelector<HTMLElement>('[data-controller~="ink-store--help-button"]')!;
+  env.run();
+  await env.mountedAfter();
+  const links = [...env.shadow('assistant')!.querySelectorAll<HTMLAnchorElement>('.shortcuts a')];
+  assert.deepEqual(links.map((a) => a.textContent), ['Status do pedido', 'Troca', 'Devolução'], 'os mesmos atalhos da ajuda nativa');
+  assert.equal(links[0]!.getAttribute('href'), '/vistaentrenos/orders/trackings');
+  assert.equal(native.style.display, 'none', 'botão nativo recolhido: funções no assistente');
+  env.setConfig(configWith({ share: {} }, undefined, 2));
+  await env.window.PersonalizacoesInk.refresh();
+  assert.equal(native.style.display, '', 'desligar o assistente devolve o botão nativo');
+});
+
+test('M10: opção de manter o botão "Ajuda?" separado', async () => {
+  const env = setup(HOME, '/vistaentrenos', configWith({ assistant: { nativeHelp: 'manter', knowledge: [{ topic: 'entrega', question: 'Prazo?', answer: 'x', keywords: '' }] } }));
+  env.run();
+  await env.mountedAfter();
+  assert.equal(env.shadow('assistant')!.querySelector('.shortcuts'), null);
+  assert.equal(env.document.querySelector<HTMLElement>('[data-controller~="ink-store--help-button"]')!.style.display, '');
 });
 
 // ---------------------------------------------------------------- M11

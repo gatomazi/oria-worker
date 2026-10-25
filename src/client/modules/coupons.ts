@@ -54,6 +54,21 @@ const CSS = `
   .title{font-size:20px}
 }
 :host{container-type:inline-size}
+/* Compacto: uma linha por cupom (título curto, código, copiar); o resto abre em "Condições". */
+.wrap.compact{padding:10px 12px}
+.compact .list{gap:8px}
+.card.compact{gap:6px}
+.card.compact+.card.compact{padding-top:8px}
+.c-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center}
+.c-title{margin:0;font-size:14px;font-weight:700;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.compact .code{flex:none;min-height:36px;padding:4px 10px;font-size:14px;border-width:1.5px}
+.compact .copy{flex:none;min-height:36px;padding:6px 12px;font-size:14px}
+.c-more{font-size:13px}
+.c-more summary{cursor:pointer;width:max-content;opacity:.85;text-decoration:underline;text-underline-offset:3px}
+.c-more[open] summary{margin-bottom:6px}
+.c-more .fine,.c-more .desc{margin:0 0 4px}
+.compact .use{min-height:36px;margin-top:4px}
+@container (max-width:300px){.c-line{grid-template-columns:minmax(0,1fr) auto}.compact .code{grid-column:1/-1;order:3}}
 `;
 
 function effective(c: Campaign, now: number): boolean {
@@ -86,6 +101,9 @@ const couponsModule: ClientModule = {
       inkCoupons?: boolean;
       productStyle?: string;
       productTitle?: string;
+      /** Apresentação do bloco por dispositivo ('bloco' = o de sempre). */
+      styleMobile?: 'bloco' | 'compacto';
+      styleDesktop?: 'bloco' | 'compacto';
       cardBadge?: 'foto-esquerda' | 'foto-direita' | 'abaixo-preco';
     };
     const { signal } = ctx;
@@ -121,10 +139,11 @@ const couponsModule: ClientModule = {
           host.style.setProperty('--ac', s.accent.bg);
           host.style.setProperty('--on-ac', s.accent.fg);
           root.append(h('style', {}, `:host{--bg:${s.colors.bg};--fg:${s.colors.fg};--ac:${s.accent.bg};--on-ac:${s.accent.fg}}`));
-          const wrap = h('section', { class: 'wrap', 'aria-label': 'Cupons da loja' });
+          const small = (ctx.device === 'mobile' ? s.styleMobile : s.styleDesktop) === 'compacto';
+          const wrap = h('section', { class: `wrap${small ? ' compact' : ''}`, 'aria-label': 'Cupons da loja' });
           const shown = s.mode === 'unico' ? live.slice(0, 1) : live;
-          const cards = shown.map((c, i) => card(c, i, root, signal, timers));
-          if (s.mode === 'abas' && cards.length > 1) {
+          const cards = shown.map((c, i) => card(c, i, root, signal, timers, small));
+          if (s.mode === 'abas' && cards.length > 1 && !small) {
             const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Campanhas' });
             const buttons = shown.map((c, i) => {
               const b = h('button', { class: 'tab', role: 'tab', type: 'button', id: `pk-tab-${i}`, 'aria-controls': `pk-panel-${i}`, 'aria-selected': i === 0 ? 'true' : 'false', tabindex: i === 0 ? '0' : '-1' }, c.title);
@@ -422,9 +441,10 @@ async function loadInkCoupons(signal: AbortSignal): Promise<Campaign[]> {
   });
 }
 
-function card(c: Campaign, i: number, root: ShadowRoot, signal: AbortSignal, timers: Set<ReturnType<typeof setTimeout>>): HTMLElement {
+function card(c: Campaign, i: number, root: ShadowRoot, signal: AbortSignal, timers: Set<ReturnType<typeof setTimeout>>, small = false): HTMLElement {
   const code = h('span', { class: 'code', 'aria-label': `Código do cupom: ${c.code}` }, c.code);
-  const copy = h('button', { class: 'btn copy', type: 'button' }, 'Copiar código');
+  const copyLabel = small ? 'Copiar' : 'Copiar código';
+  const copy = h('button', { class: 'btn copy', type: 'button', 'aria-label': `Copiar o código ${c.code}` }, copyLabel);
   const use = h('button', { class: 'btn use', type: 'button' }, 'Usar no carrinho');
   const status = h('p', { class: 'status', role: 'status', 'aria-live': 'polite' });
   let reset: ReturnType<typeof setTimeout> | undefined;
@@ -443,7 +463,7 @@ function card(c: Campaign, i: number, root: ShadowRoot, signal: AbortSignal, tim
       if (ok) {
         say(MESSAGES.copied, 'ok');
         copy.textContent = 'Copiado';
-        reset = setTimeout(() => (copy.textContent = 'Copiar código'), 2500);
+        reset = setTimeout(() => (copy.textContent = copyLabel), 2500);
         timers.add(reset);
       } else {
         say(MESSAGES.copyFailed, 'error');
@@ -476,6 +496,26 @@ function card(c: Campaign, i: number, root: ShadowRoot, signal: AbortSignal, tim
       : c.endsAt
         ? `Válido até ${formatWhen(c.endsAt)}.`
         : '';
+  // "Usar no carrinho" só aparece quando o carrinho da INK tem o campo de cupom.
+  use.hidden = !cartCouponInput();
+  if (small) {
+    // Código e copiar sempre à vista; descrição (com o alcance), primeira compra, condições e validade ao abrir.
+    return h(
+      'article',
+      { class: 'card compact', 'data-index': String(i) },
+      h('div', { class: 'c-line' }, h('p', { class: 'c-title' }, c.title), code, copy),
+      h(
+        'details',
+        { class: 'c-more' },
+        h('summary', {}, c.firstPurchase ? 'Condições · só na 1ª compra' : 'Condições'),
+        c.description ? h('p', { class: 'desc' }, c.description) : null,
+        h('p', { class: 'fine' }, c.conditions),
+        validity ? h('p', { class: 'fine' }, validity) : null,
+        use,
+      ),
+      status,
+    );
+  }
   const el = h(
     'article',
     { class: 'card', 'data-index': String(i) },
@@ -485,8 +525,6 @@ function card(c: Campaign, i: number, root: ShadowRoot, signal: AbortSignal, tim
     h('p', { class: 'fine' }, c.conditions),
     validity ? h('p', { class: 'fine' }, validity) : null,
   );
-  // "Usar no carrinho" só aparece quando o carrinho da INK tem o campo de cupom.
-  use.hidden = !cartCouponInput();
   return el;
 }
 

@@ -15,7 +15,7 @@ import {
   publishErrors,
   toPublicConfig,
   type PublicConfig,
-  type StoreConfig,
+  type StoreConfig, newStoreConfig
 } from '../shared/registry.ts';
 
 export class ServiceError extends Error {
@@ -258,7 +258,7 @@ export class StoreService {
         )
         .run(value.id, value.name, value.kind, value.status, value.ownerName, value.ownerEmail, value.domain, value.basePath, value.devHost, value.devOrigin, JSON.stringify(value.integration), JSON.stringify(value.extraModules), value.notes, now, now);
       for (const p of value.packages) this.db.prepare('INSERT INTO store_packages (store_id, package_id) VALUES (?, ?)').run(value.id, p);
-      this.db.prepare('INSERT INTO drafts (store_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)').run(value.id, JSON.stringify(defaultConfig(identity.value)), now, userId);
+      this.db.prepare('INSERT INTO drafts (store_id, config, updated_at, updated_by) VALUES (?, ?, ?, ?)').run(value.id, JSON.stringify(newStoreConfig(identity.value)), now, userId);
     });
     this.audit(userId, value.id, 'store.create', value.name);
     return this.get(value.id)!;

@@ -98,6 +98,21 @@ export function defaultConfig(identity: Identity = DEFAULT_IDENTITY): StoreConfi
   return { schemaVersion: SCHEMA_VERSION, identity: { ...identity }, library: { videos: [] }, modules };
 }
 
+/**
+ * Sugestões para lojas NOVAS. Os padrões dos módulos preservam o que as lojas existentes já
+ * mostram (um campo novo nunca muda uma loja que já está no ar); aqui ficam os pontos de partida
+ * melhores para quem começa agora.
+ */
+export const NEW_STORE_SETTINGS: Record<string, Record<string, unknown>> = {
+  coupons: { styleMobile: 'compacto' },
+};
+
+export function newStoreConfig(identity: Identity = DEFAULT_IDENTITY): StoreConfig {
+  const c = defaultConfig(identity);
+  for (const [id, over] of Object.entries(NEW_STORE_SETTINGS)) if (c.modules[id]) c.modules[id]!.settings = { ...c.modules[id]!.settings, ...over };
+  return c;
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }

@@ -70,6 +70,16 @@ export const assistant: ModuleDef = {
     { key: 'proactiveMessage', type: 'text', label: 'Texto do convite', max: 100, showWhen: { key: 'proactive', in: ['convite'] }, required: true },
     { key: 'maxMessages', type: 'number', label: 'Limite de perguntas por visita', min: 3, max: 50, integer: true },
     {
+      key: 'nativeHelp',
+      type: 'select',
+      label: 'Botão "Ajuda?" da loja',
+      help: 'Com o assistente, a loja fica com uma entrada só de atendimento: os atalhos da ajuda (status do pedido, troca, devolução, política) aparecem dentro dele.',
+      options: [
+        { value: 'integrar', label: 'Levar os atalhos para dentro do assistente' },
+        { value: 'manter', label: 'Manter o botão "Ajuda?" separado' },
+      ],
+    },
+    {
       key: 'position',
       type: 'select',
       label: 'Posição do botão',
@@ -96,6 +106,7 @@ export const assistant: ModuleDef = {
     proactiveDelay: 20,
     proactiveMessage: 'Precisa de ajuda para escolher?',
     maxMessages: 15,
+    nativeHelp: 'integrar',
     position: 'inferior-direita',
     pages: ['home', 'listing', 'product'],
     devices: ['mobile', 'desktop'],
@@ -118,6 +129,7 @@ export const assistant: ModuleDef = {
     proactiveMessage: s.proactive === 'convite' ? s.proactiveMessage : '',
     maxMessages: s.maxMessages,
     position: s.position,
+    nativeHelp: s.nativeHelp,
     colors: color(ctx, s.accent),
   }),
 };

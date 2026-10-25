@@ -45,7 +45,13 @@ const headerModule: ClientModule = {
       `header.header[data-pink-header],header.header[data-pink-header] .brand-color,header.header[data-pink-header] .navbar-list.brand-color,#product-sidebar,#collection-sidebar{background-color:${bg}!important;color:${fg}!important}`,
       `header.header[data-pink-header] a,header.header[data-pink-header] .navbar-list__item,header.header[data-pink-header] button,header.header[data-pink-header] [data-feather],header.header[data-pink-header] .text-store-font{color:${fg}!important}`,
       `header.header[data-pink-header] .menu-filters a,header.header[data-pink-header] .menu-user a{color:#1f1f1f!important}`,
-      `header.header[data-pink-header] a.brand img{max-width:${s.logoWidth}px!important;width:${s.logoWidth}px;height:auto}`,
+      // Logo cabe na faixa em qualquer formato (quadrado, horizontal, vertical): limitado pela
+      // largura configurada E por uma altura máxima, sem cortar. No celular a faixa cresce até
+      // essa altura e a busca vem logo abaixo, sem cobrir a marca.
+      `header.header[data-pink-header] a.brand{display:flex;align-items:center;justify-content:center;flex:none;line-height:0}`,
+      `header.header[data-pink-header] a.brand img{width:auto!important;height:auto!important;max-width:${s.logoWidth}px!important;max-height:60px!important;object-fit:contain}`,
+      `@media (max-width:1023px){header.header[data-pink-header] a.brand img{max-width:min(${s.logoWidth}px,40vw)!important;max-height:48px!important}` +
+        `header.header[data-pink-header] .navbar__top{height:auto!important;min-height:48px;align-items:center!important;padding-bottom:4px}}`,
     ];
 
     // Disposição (computador): nativo = links | logo | busca+ícones.
@@ -64,7 +70,7 @@ const headerModule: ClientModule = {
     // Busca sempre visível (a INK esconde o campo até receber foco).
     if (s.searchMode === 'barra') {
       css.push(
-        `#search_filter{opacity:1!important;pointer-events:auto!important;min-width:220px}`,
+        `#search_filter{opacity:1!important;pointer-events:auto!important;min-width:min(280px,24vw)}`,
         `#search_filter_mobile{opacity:1!important;height:44px!important;margin:6px 0 10px!important;pointer-events:auto!important}`,
       );
     }

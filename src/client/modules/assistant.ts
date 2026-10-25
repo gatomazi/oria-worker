@@ -1,7 +1,11 @@
 // M10 — Assistente da loja. Respostas vêm do servidor (base de respostas da
 // loja + catálogo e coleções da loja; sem IA). Aqui só a interface: botão
 // flutuante, painel, sugestões, produtos, coleções e encaminhamento ao atendimento.
-import { h, isMobile, safeHref, shadowHost } from '../runtime/dom.ts';
+// Entrada única de atendimento: os links da ajuda nativa da INK (pedido, troca,
+// devolução, política) viram atalhos dentro do assistente e o botão nativo sai de
+// cena. Sem esses links na página, o botão nativo continua. Desligar devolve tudo.
+import { h, isMobile, safeHref, shadowHost, Undo } from '../runtime/dom.ts';
+import { ink } from '../runtime/page.ts';
 import type { ClientModule, ModuleContext } from '../runtime/types.ts';
 
 interface Reply {
@@ -42,13 +46,18 @@ const CSS = `
 form{display:flex;gap:6px;padding:10px;border-top:1px solid #eee}
 input{flex:1;min-height:44px;border:1px solid #cfcfcf;border-radius:10px;padding:8px 12px;font:inherit;font-size:16px}
 .send{min-height:44px;background:var(--ac);color:var(--on-ac);padding:8px 14px}
+.shortcuts{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;border-bottom:1px solid #eee;scrollbar-width:none}
+.shortcuts::-webkit-scrollbar{display:none}
+.shortcuts a{flex:none;display:inline-flex;align-items:center;min-height:34px;padding:4px 12px;border-radius:999px;border:1px solid #d6d6d6;color:#1f1f1f;text-decoration:none;font-size:13px;white-space:nowrap}
+.shortcuts a:hover{border-color:var(--ac)}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 12px 10px;font-size:12px;color:#666}
 @media (max-width:767px){.panel{left:0!important;right:0!important;bottom:0;width:100%;max-height:85vh;border-radius:16px 16px 0 0}}
 `;
 
 const assistantModule: ClientModule = {
   mount(ctx: ModuleContext) {
-    const s = ctx.settings as { name: string; greeting: string; suggestions: string[]; contactLabel: string; hours: string; proactive: string; proactiveDelay: number; proactiveMessage: string; maxMessages: number; position: string; colors: { bg: string; fg: string } };
+    const s = ctx.settings as { name: string; greeting: string; suggestions: string[]; contactLabel: string; hours: string; proactive: string; proactiveDelay: number; proactiveMessage: string; maxMessages: number; position: string; nativeHelp?: string; colors: { bg: string; fg: string } };
+    const undo = new Undo();
     const side: 'left' | 'right' = s.position === 'inferior-esquerda' ? 'left' : 'right';
     const { signal } = ctx;
     const previewToken = document.querySelector<HTMLScriptElement>('script[data-pink-loader]')?.dataset.pinkPreview ?? '';
@@ -76,7 +85,20 @@ const assistantModule: ClientModule = {
     const form = h('form', {}, input, send);
     const remainingEl = h('span');
     const close = h('button', { type: 'button' }, 'Fechar');
-    const panel = h('div', { class: 'panel', id: 'pk-assist', role: 'dialog', 'aria-label': s.name, hidden: true }, h('div', { class: 'top' }, h('p', {}, s.name), close), log, form, h('div', { class: 'foot' }, h('span', {}, s.hours ? `Atendimento: ${s.hours}` : ''), remainingEl));
+    // Atalhos da ajuda nativa da INK, lidos da própria página (nada inventado).
+    const nativeHelp = ink.helpButton();
+    const shortcuts =
+      s.nativeHelp === 'manter' || !nativeHelp
+        ? []
+        : [...nativeHelp.querySelectorAll<HTMLAnchorElement>('[data-ink-store--help-button-target="linksList"] a[href]')]
+            .map((a) => ({ label: (a.textContent ?? '').replace(/\s+/g, ' ').trim(), href: safeHref(a.getAttribute('href') ?? ''), blank: a.target === '_blank' }))
+            .filter((x) => x.label && x.href)
+            .slice(0, 8);
+    if (nativeHelp && shortcuts.length) undo.hide(nativeHelp);
+    const shortcutsBar = shortcuts.length
+      ? h('nav', { class: 'shortcuts', 'aria-label': 'Atalhos da loja' }, ...shortcuts.map((x) => h('a', { href: x.href, ...(x.blank ? { target: '_blank', rel: 'noopener' } : {}) }, x.label)))
+      : null;
+    const panel = h('div', { class: 'panel', id: 'pk-assist', role: 'dialog', 'aria-label': s.name, hidden: true }, h('div', { class: 'top' }, h('p', {}, s.name), close), shortcutsBar ?? '', log, form, h('div', { class: 'foot' }, h('span', {}, s.hours ? `Atendimento: ${s.hours}` : ''), remainingEl));
     root.append(launch, panel);
 
     const bubble = (text: string, who: 'bot' | 'me') => {
@@ -186,6 +208,8 @@ const assistantModule: ClientModule = {
       destroy() {
         clearTimeout(inviteTimer);
         host.remove();
+        undo.run();
+        ctx.floating.layout();
       },
     };
   },

@@ -50,7 +50,7 @@ export function themeCss(theme: Theme): string {
 *{box-sizing:border-box}
 button{font:inherit;cursor:pointer}
 button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--pk-primary);outline-offset:2px}
-input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pk-primary);outline-offset:0;border-color:var(--pk-primary)}
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pk-primary);outline-offset:-1px;border-color:transparent}
 input,textarea{caret-color:var(--pk-primary)}
 ::selection{background:color-mix(in srgb,var(--pk-primary) 22%,transparent)}
 [hidden]{display:none!important}

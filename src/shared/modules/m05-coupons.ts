@@ -42,6 +42,25 @@ export const coupons: ModuleDef = {
       ],
     },
     {
+      key: 'styleMobile',
+      type: 'select',
+      label: 'Bloco no celular',
+      help: 'Compacto: uma linha por cupom (título curto, código e Copiar); descrição, condições e validade abrem em "Condições". Ocupa bem menos espaço antes do banner.',
+      options: [
+        { value: 'bloco', label: 'Bloco completo' },
+        { value: 'compacto', label: 'Compacto' },
+      ],
+    },
+    {
+      key: 'styleDesktop',
+      type: 'select',
+      label: 'Bloco no computador',
+      options: [
+        { value: 'bloco', label: 'Bloco completo' },
+        { value: 'compacto', label: 'Compacto' },
+      ],
+    },
+    {
       key: 'productStyle',
       type: 'select',
       label: 'Na página do produto',
@@ -85,6 +104,9 @@ export const coupons: ModuleDef = {
   defaults: {
     mode: 'unico',
     campaigns: [],
+    // Lojas existentes mantêm o bloco; lojas novas recebem o compacto no celular (ver NEW_STORE_SETTINGS).
+    styleMobile: 'bloco',
+    styleDesktop: 'bloco',
     productStyle: 'junto-preco',
     productTitle: 'Cupons para este produto',
     cardBadge: 'foto-esquerda',
@@ -129,6 +151,8 @@ export const coupons: ModuleDef = {
       position: s.position,
       blockPages: s.pages,
       inkCoupons: s.inkCoupons === true,
+      styleMobile: s.styleMobile,
+      styleDesktop: s.styleDesktop,
       productStyle: s.productStyle,
       productTitle: s.productTitle,
       cardBadge: s.cardBadge,
