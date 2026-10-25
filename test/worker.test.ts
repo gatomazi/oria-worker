@@ -3,6 +3,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { Miniflare } from 'miniflare';
 import '../src/shared/modules/index.ts';
 import { defaultConfig, parseStoreConfig, toPublicConfig, moduleDefs } from '../src/shared/registry.ts';
@@ -13,6 +14,7 @@ const HOME = readFileSync('test/fixtures/ink/home.html', 'utf8');
 type Mode = 'coupons-home' | 'gallery-only' | 'none' | 'down' | 'invalid' | 'slow';
 let mode: Mode = 'coupons-home';
 const hits: string[] = [];
+const configCalls: { status: number; bytes: number }[] = [];
 
 function publicConfig(storeId: string, enabled: string[]) {
   const c = defaultConfig();
@@ -48,7 +50,15 @@ const mf = new Miniflare({
         if (mode === 'none') return json({ error: 'not_published' }, 404);
         const cfg = publicConfig(url.pathname.split('/')[4]!, mode === 'gallery-only' ? ['gallery'] : ['coupons']) as any;
         if (mode === 'invalid') cfg.modules.coupons.settings.campaigns[0].title = '<script>x</script>';
-        return json(cfg);
+        // Como o serviço real: ETag do conteúdo e 304 quando o Worker já tem esta versão.
+        const body = JSON.stringify(cfg);
+        const etag = `"${createHash('sha256').update(body).digest('base64url').slice(0, 22)}"`;
+        if (req.headers.get('if-none-match') === etag) {
+          configCalls.push({ status: 304, bytes: 0 });
+          return new Response(null, { status: 304, headers: { etag } });
+        }
+        configCalls.push({ status: 200, bytes: body.length });
+        return new Response(body, { headers: { 'content-type': 'application/json', etag } });
       }
       if (/\/preview-config$/.test(url.pathname)) return url.searchParams.get('token') === 'tok-valido-123456789012345' ? json(publicConfig('demo-aurora', ['coupons'])) : json({ error: 'invalid_token' }, 403);
       if (/^\/client\//.test(url.pathname)) return new Response('/* carregador */', { headers: { 'content-type': 'text/javascript' } });
@@ -90,6 +100,33 @@ test('injeta o carregador só onde algum módulo publicado roda', async () => {
   mode = 'gallery-only';
   assert.equal(tags((await go('http://demo-aurora.localhost:8787/vistaentrenos')).body).length, 0);
   assert.equal(tags((await go('http://demo-aurora.localhost:8787/vistaentrenos/product/x')).body).length, 1);
+});
+
+test('publicação vale na próxima navegação; sem mudança, o Worker revalida (304) sem baixar de novo', async () => {
+  mode = 'coupons-home';
+  configCalls.length = 0;
+  const url = 'http://demo-aurora.localhost:8787/vistaentrenos';
+  await go(url);
+  await go(url);
+  await go(url);
+  // 1ª: corpo inteiro (ou 304 se outro teste já guardou esta versão); depois só 304.
+  assert.deepEqual(configCalls.slice(1).map((c) => c.status), [304, 304], 'mesma versão: sem corpo');
+  assert.ok(configCalls.every((c) => c.status === 200 || c.bytes === 0));
+  // Desligar o cupom (nova versão no serviço): a navegação seguinte já não injeta.
+  mode = 'gallery-only';
+  configCalls.length = 0;
+  assert.equal(tags((await go(url)).body).length, 0, 'próxima navegação reflete o desligamento');
+  assert.equal(configCalls[0]!.status, 200, 'conteúdo novo baixado uma vez');
+  // Retirar a publicação/liberação (404): nada injetado, e a versão guardada é descartada.
+  mode = 'none';
+  assert.equal(tags((await go(url)).body).length, 0);
+  mode = 'coupons-home';
+  configCalls.length = 0;
+  assert.equal(tags((await go(url)).body).length, 1);
+  assert.equal(configCalls[0]!.status, 200, 'sem reaproveitar a versão antiga depois do 404');
+  // O navegador recebe a mesma configuração validada em /__pink/config.json.
+  const cfg = JSON.parse((await go('http://demo-aurora.localhost:8787/__pink/config.json')).body);
+  assert.ok(cfg.modules.coupons);
 });
 
 for (const m of ['none', 'down', 'invalid', 'slow'] as const) {

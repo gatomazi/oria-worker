@@ -32,7 +32,8 @@ export class ServiceError extends Error {
 
 export const STORE_ID = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 const HOSTNAME = /^(?=.{3,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
-const DEV_HOST = /^[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?\.localhost$/;
+/** Endereço de teste: <nome>.localhost no ambiente local; no hospedado, um host do Worker de teste. */
+const DEV_HOST = /^(?=.{3,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(localhost|[a-z]{2,})$/;
 
 /** Capacidades de integração da INK, preenchidas pelo operador. */
 export interface Integration {
@@ -156,6 +157,16 @@ export class StoreService {
     return (this.db.prepare('SELECT * FROM stores ORDER BY created_at, id').all() as Record<string, unknown>[]).map((r) => this.rowToStore(r));
   }
 
+  byDomain(host: string): Store | null {
+    const r = this.db.prepare('SELECT * FROM stores WHERE domain = ? LIMIT 1').get(host.toLowerCase()) as Record<string, unknown> | undefined;
+    return r ? this.rowToStore(r) : null;
+  }
+
+  /** A loja de um host de pedido: endereço de teste ou domínio real. */
+  byHost(host: string): Store | null {
+    return this.byDevHost(host) ?? this.byDomain(host);
+  }
+
   byDevHost(host: string): Store | null {
     const r = this.db.prepare('SELECT * FROM stores WHERE dev_host = ?').get(host.toLowerCase()) as Record<string, unknown> | undefined;
     return r ? this.rowToStore(r) : null;
@@ -194,10 +205,16 @@ export class StoreService {
     }
     const kind = existing?.kind ?? (r.kind === 'demo' ? 'demo' : 'ink');
     const devHost = (str('devHost') || `${id}.localhost`).toLowerCase();
-    if (!DEV_HOST.test(devHost)) errors.push({ field: 'devHost', message: 'Endereço local: use <nome>.localhost.' });
+    if (!DEV_HOST.test(devHost)) errors.push({ field: 'devHost', message: 'Endereço de teste: um host, por exemplo minhaloja.localhost.' });
     else {
-      const other = this.byDevHost(devHost);
-      if (other && other.id !== id) errors.push({ field: 'devHost', message: 'Endereço local já usado por outra loja.' });
+      const other = this.byDevHost(devHost) ?? this.byDomain(devHost);
+      if (other && other.id !== id) errors.push({ field: 'devHost', message: 'Endereço de teste já usado por outra loja.' });
+      if (devHost === domain) errors.push({ field: 'devHost', message: 'O endereço de teste não pode ser o domínio da loja.' });
+    }
+    // Cada host aponta para uma loja só: o Worker identifica a loja pelo host do pedido.
+    if (HOSTNAME.test(domain)) {
+      const owner = this.byDomain(domain) ?? this.byDevHost(domain);
+      if (owner && owner.id !== id) errors.push({ field: 'domain', message: 'Domínio já cadastrado em outra loja.' });
     }
     const devOrigin = kind === 'demo' ? (existing?.devOrigin ?? str('devOrigin')) : `https://${domain}`;
     if (kind === 'demo' && !/^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(devOrigin)) errors.push({ field: 'devOrigin', message: 'Loja demo: origem local inválida.' });

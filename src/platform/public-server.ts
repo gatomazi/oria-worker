@@ -3,6 +3,7 @@
 // mídia e o assistente. Nada aqui expõe rascunho sem token válido.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { BodyError, readJson, send, sendJson } from './http.ts';
 import type { MediaStore } from './media.ts';
@@ -50,7 +51,9 @@ export function createPublicHandler(deps: PublicDeps): (req: IncomingMessage, re
     if (client && method === 'GET') {
       try {
         const body = await readFile(`${ROOT}dist/client/${client[1]}`);
-        return send(res, 200, body, 'text/javascript; charset=utf-8');
+        // Módulos com hash no nome nunca mudam; o carregador muda a cada versão do serviço.
+        const immutable = client[1]!.startsWith('m/');
+        return send(res, 200, body, 'text/javascript; charset=utf-8', { 'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=300' });
       } catch {
         return send(res, 404, '/* arquivo não encontrado */', 'text/javascript; charset=utf-8');
       }
@@ -60,7 +63,7 @@ export function createPublicHandler(deps: PublicDeps): (req: IncomingMessage, re
     const host = /^\/api\/v1\/hosts\/([a-z0-9.\-]{3,253})$/.exec(path);
     if (host && method === 'GET') {
       const h = host[1]!.toLowerCase();
-      const store = stores.byDevHost(h) ?? stores.list().find((s) => s.domain === h) ?? null;
+      const store = stores.byHost(h);
       if (!store) return sendJson(res, 404, { error: 'unknown_host' });
       return sendJson(res, 200, {
         storeId: store.id,
@@ -81,7 +84,16 @@ export function createPublicHandler(deps: PublicDeps): (req: IncomingMessage, re
 
     if (action === 'config' && method === 'GET') {
       const config = stores.publicConfig(store.id);
-      return config ? sendJson(res, 200, config) : sendJson(res, 404, { error: 'not_published' });
+      if (!config) return sendJson(res, 404, { error: 'not_published' }, { 'cache-control': 'no-store' });
+      // ETag do conteúdo: o Worker revalida a cada página e só baixa quando muda.
+      const body = JSON.stringify(config);
+      const etag = `"${createHash('sha256').update(body).digest('base64url').slice(0, 22)}"`;
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, { etag, 'cache-control': 'no-cache' });
+        res.end();
+        return;
+      }
+      return send(res, 200, body, 'application/json; charset=utf-8', { etag, 'cache-control': 'no-cache' });
     }
     if (action === 'preview-config' && method === 'GET') {
       // Rascunho só com token assinado desta mesma loja e dentro da validade.

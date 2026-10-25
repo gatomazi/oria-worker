@@ -64,7 +64,7 @@ const admin = createAdminHandler({
   panelOrigin: cfg.panelOrigin,
   mailer,
   storeUrl,
-  install: { workerPort: cfg.workerPort, publicPort: cfg.publicPort, publicOrigin: cfg.publicOrigin, panelOrigin: cfg.panelOrigin, hosted: cfg.mode === 'hosted', stores, auth },
+  install: { workerPort: cfg.workerPort, publicPort: cfg.publicPort, publicOrigin: cfg.publicOrigin, panelOrigin: cfg.panelOrigin, hosted: cfg.mode === 'hosted', stores, auth, integration },
   integration,
 });
 const pub = createPublicHandler({ stores, media, secret, assistant });

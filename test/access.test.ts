@@ -206,3 +206,38 @@ test('integração: o lojista guarda o token da própria loja e ele nunca volta 
   assert.match(bodies[1]!, /"hint":"FIM9"/);
   assert.equal((await call(m, 'DELETE', '/api/stores/demo-aurora/integration/ink-token')).status, 200);
 });
+
+test('configuração pública: ETag/304; publicar, desligar, restaurar, retirar liberação e pausar valem no pedido seguinte', async () => {
+  const cfgOf = async (etag?: string) => {
+    const r = await fetch(`${P}/api/v1/stores/demo-trilha/config`, { headers: etag ? { 'if-none-match': etag } : {} });
+    return { status: r.status, etag: r.headers.get('etag') ?? '', body: r.status === 200 ? ((await r.json()) as { version: number; modules: Record<string, unknown> }) : null };
+  };
+  const op = await login('op@exemplo.com', 'senha-do-operador');
+  // publica com o compartilhar ligado
+  const v = (await (await call(op, 'GET', '/api/stores/demo-trilha')).json()) as { draft: { config: { modules: Record<string, { enabled: boolean }> }; updatedAt: string } };
+  v.draft.config.modules.share!.enabled = true;
+  const saved = (await (await call(op, 'PUT', '/api/stores/demo-trilha/draft', { config: v.draft.config, expectedUpdatedAt: v.draft.updatedAt })).json()) as { draft: { updatedAt: string } };
+  await call(op, 'POST', '/api/stores/demo-trilha/publish', { expectedDraftUpdatedAt: saved.draft.updatedAt });
+  const a = await cfgOf();
+  assert.equal(a.status, 200);
+  assert.ok(a.body!.modules.share);
+  assert.equal((await cfgOf(a.etag)).status, 304, 'sem mudança: 304');
+  // desligar na hora
+  await call(op, 'POST', '/api/stores/demo-trilha/modules/share/state', { enabled: false });
+  const b = await cfgOf(a.etag);
+  assert.equal(b.status, 200);
+  assert.equal(b.body!.modules.share, undefined);
+  // restaurar a versão com o módulo ligado
+  await call(op, 'POST', '/api/stores/demo-trilha/restore', { version: a.body!.version });
+  const c = await cfgOf(b.etag);
+  assert.ok(c.body!.modules.share);
+  // retirar a liberação (pacote sem o módulo): sai da configuração entregue
+  const store = (await (await call(op, 'GET', '/api/stores/demo-trilha')).json()) as { store: Record<string, unknown> };
+  await call(op, 'PUT', '/api/stores/demo-trilha', { ...store.store, packages: ['conteudo'], extraModules: [] });
+  const d = await cfgOf(c.etag);
+  assert.equal(d.body?.modules.share, undefined, 'sem liberação, fora da loja');
+  // pausar: 404 (o Worker devolve a página nativa)
+  await call(op, 'PUT', '/api/stores/demo-trilha', { ...store.store, packages: ['conteudo'], extraModules: [], status: 'paused' });
+  assert.equal((await cfgOf(d.etag)).status, 404);
+  await call(op, 'PUT', '/api/stores/demo-trilha', { ...store.store, status: 'setup' });
+});

@@ -46,16 +46,47 @@ async function resolveHost(hostname: string, env: Env): Promise<HostInfo | null>
   return value;
 }
 
+// Configuração publicada: o serviço é a fonte única e é consultado a CADA página, para que
+// publicar, restaurar, desligar módulo ou retirar liberação valha já na próxima navegação.
+// Para não baixar o mesmo conteúdo de novo, o Worker guarda a última resposta (por isolate)
+// e pergunta com If-None-Match: sem mudança, o serviço responde 304 sem corpo.
+const configCache = new Map<string, { etag: string; config: PublicConfig }>();
+
 async function loadPublicConfig(storeId: string, env: Env): Promise<PublicConfig | null> {
+  const cached = configCache.get(storeId);
   try {
     const res = await fetch(`${env.CONFIG_SERVICE_URL}/api/v1/stores/${storeId}/config`, {
+      headers: cached ? { 'if-none-match': cached.etag } : {},
       signal: AbortSignal.timeout(Number(env.CONFIG_TIMEOUT_MS ?? 1500)),
     });
-    if (!res.ok) return null;
-    return parsePublicConfig(await res.json(), storeId);
+    if (res.status === 304 && cached) return cached.config;
+    if (!res.ok) {
+      // 404: não publicada, pausada ou sem módulos aplicáveis. A página segue nativa.
+      configCache.delete(storeId);
+      return null;
+    }
+    const config = parsePublicConfig(await res.json(), storeId);
+    const etag = res.headers.get('etag');
+    if (config && etag) configCache.set(storeId, { etag, config });
+    else configCache.delete(storeId);
+    return config;
   } catch {
+    // Serviço fora ou lento: nada é injetado (sem servir uma versão que pode ter sido desligada).
     return null;
   }
+}
+
+/** Arquivos do carregador: os módulos têm hash no nome (imutáveis); guardados no cache do edge. */
+async function clientFile(request: Request, file: string, env: Env): Promise<Response> {
+  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+  const key = new Request(new URL(`/__pink/client/${file}`, request.url).toString(), { method: 'GET' });
+  if (cache) {
+    const hit = await cache.match(key);
+    if (hit) return hit;
+  }
+  const res = await proxyService(env, `/client/${file}`);
+  if (cache && res.ok && /public/.test(res.headers.get('cache-control') ?? '')) await cache.put(key, res.clone());
+  return res;
 }
 
 const json = (status: number, data: unknown) =>
@@ -121,7 +152,7 @@ async function ownRoute(request: Request, url: URL, host: HostInfo, env: Env): P
   const p = url.pathname.slice('/__pink/'.length);
   const id = host.storeId;
   const client = /^client\/([A-Za-z0-9-]+(?:\/[A-Za-z0-9-]+)?\.js)$/.exec(p);
-  if (client && request.method === 'GET') return proxyService(env, `/client/${client[1]}`);
+  if (client && request.method === 'GET') return clientFile(request, client[1]!, env);
   if (p === 'config.json' && request.method === 'GET') {
     const config = await loadPublicConfig(id, env);
     return config ? json(200, config) : json(404, { error: 'no_applicable_config' });
