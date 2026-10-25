@@ -101,7 +101,7 @@ test('M03: miniaturas de todas as fotos; clique aciona só o ponto nativo, sem m
   const env = setup(PDP, PDP_PATH, configWith({ gallery: { hideBullets: true } }));
   env.run();
   await env.mountedAfter();
-  const thumbs = env.shadow('gallery')!.querySelectorAll('button');
+  const thumbs = env.shadow('gallery')!.querySelectorAll('button.thumb');
   const dots = env.document.querySelectorAll('button[id^="dot-image-"]');
   assert.equal(thumbs.length, dots.length, 'uma miniatura por foto navegável da INK');
   const variant = env.document.querySelector<HTMLInputElement>('#product-variant-id-4976077')!;
@@ -115,6 +115,17 @@ test('M03: miniaturas de todas as fotos; clique aciona só o ponto nativo, sem m
   await env.tick(10);
   assert.equal(thumbs[3]!.getAttribute('aria-current'), 'true', 'acompanha a foto ativa da INK');
   assert.equal((dot.closest('ul') as HTMLElement).style.display, 'none');
+  const css = env.shadow('gallery')!.querySelector('style')!.textContent!;
+  assert.match(css, /\.thumbs\{[^}]*display:flex;overflow-x:auto/, 'padrão: uma linha que rola de lado');
+});
+
+test('M03: em grade, todas as miniaturas à mostra (várias linhas)', async () => {
+  const env = setup(PDP, PDP_PATH, configWith({ gallery: { layout: 'grade' } }));
+  env.run();
+  await env.mountedAfter();
+  const css = env.shadow('gallery')!.querySelector('style')!.textContent!;
+  assert.match(css, /display:grid;grid-template-columns:repeat\(auto-fill/);
+  assert.doesNotMatch(css, /overflow-x:auto/);
 });
 
 // ---------------------------------------------------------------- M04

@@ -210,7 +210,7 @@ try {
   check('Loja real: cupom em abas logo abaixo do preço', /ENTRENOS10/i.test(tabsNearPrice) && /primeira compra/i.test(tabsNearPrice), tabsNearPrice);
   const cardBadge = await store.evaluate(() => document.querySelector('.card-thumb [data-pink-badge]')?.textContent ?? '');
   check('Loja real: selo de 1ª compra nos cards de produto', cardBadge === '10% na 1ª compra', cardBadge || '(sem cards na página)');
-  const thumbs = await store.evaluate(() => document.querySelector('[data-pink-module="gallery"]')?.shadowRoot?.querySelectorAll('button').length ?? 0);
+  const thumbs = await store.evaluate(() => document.querySelector('[data-pink-module="gallery"]')?.shadowRoot?.querySelectorAll('button.thumb').length ?? 0);
   check('Loja real: miniaturas das fotos do produto', thumbs > 1, `${thumbs} miniaturas`);
   // M12 com o formulário de CEP da própria INK (GET)
   const cepRoot = store.locator('[data-pink-module="delivery"]');
