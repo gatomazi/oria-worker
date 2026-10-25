@@ -426,8 +426,10 @@ export class StoreService {
       const config = structuredClone(pub.config);
       config.modules[def.id]!.enabled = enabled;
       if (enabled) {
-        const errs = publishErrors(config, this.entitled(store), this.now().getTime());
-        if (errs.length) throw new ServiceError(422, 'invalid_config', `${def.name} não pode ser religado como está publicado.`, errs);
+        // Ligar exige o módulo completo (campos obrigatórios, listas mínimas, regras do módulo), como ao publicar.
+        const own = (e: FieldError) => e.field.startsWith(`modules.${def.id}.`) || e.field === `modules.${def.id}`;
+        const errs = [...parseStoreConfig(config).errors.filter(own), ...publishErrors(config, this.entitled(store), this.now().getTime()).filter(own)];
+        if (errs.length) throw new ServiceError(422, 'invalid_config', `${def.name} não pode ser ligado como está publicado: complete a configuração no rascunho e publique.`, errs);
       }
       this.insertPublication(store, config, enabled ? 'enable' : 'disable', def.id, userId);
       const draft = this.draftRow(store);

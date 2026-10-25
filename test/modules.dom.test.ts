@@ -541,3 +541,24 @@ test('M12: produção separada e CEP pelo formulário da própria INK', async ()
   assert.match(root.textContent ?? '', /Entrega entre Quinta, 29 de Outubro.*cálculo da INK/);
   assert.deepEqual(env.posts, [], 'não chama endpoint por fora');
 });
+
+// ---------------------------------------------------------------- M13
+
+test('M13: aviso de cookies nativo com a cara da loja; texto trocado mantém o link; desmontar devolve o original', async () => {
+  const env = setup(HOME, '/vistaentrenos', configWith({ cookieNotice: { message: 'Usamos cookies para lembrar seu carrinho.', buttonLabel: 'Entendi' } }));
+  const banner = env.document.querySelector<HTMLElement>('.cookie-acceptance')!;
+  const original = banner.innerHTML;
+  env.run();
+  assert.deepEqual(await env.mountedAfter(), ['cookieNotice']);
+  assert.ok(banner.hasAttribute('data-pink-cookie'));
+  assert.ok(env.document.querySelector('style[data-pink-style="cookieNotice"]'));
+  assert.match(banner.querySelector('p')!.textContent!.trim(), /^Usamos cookies para lembrar seu carrinho\. Política de Privacidade\.$/);
+  assert.equal(banner.querySelector('a')!.getAttribute('href'), '/vistaentrenos/terms/privacy_policy', 'link da INK fica');
+  assert.equal(banner.querySelector('button')!.textContent, 'Entendi');
+  assert.equal(banner.querySelector('button')!.getAttribute('data-action'), 'click->ink-store--cookie-acceptance#accept', 'o aceite continua sendo da INK');
+  env.setConfig(configWith({ share: {} }, undefined, 2));
+  assert.deepEqual(JSON.parse(JSON.stringify(await env.window.PersonalizacoesInk.refresh())).mounted, []);
+  assert.equal(banner.innerHTML, original);
+  assert.ok(!banner.hasAttribute('data-pink-cookie'));
+  assert.equal(env.document.querySelector('style[data-pink-style="cookieNotice"]'), null);
+});

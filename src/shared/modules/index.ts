@@ -12,9 +12,10 @@ import { miniPlayer } from './m09-mini-player.ts';
 import { assistant } from './m10-assistant.ts';
 import { sizeGuide } from './m11-size-guide.ts';
 import { delivery } from './m12-delivery.ts';
+import { cookieNotice } from './m13-cookie-notice.ts';
 
 if (!moduleDefs().length) {
-  for (const def of [header, categoryTabs, gallery, share, coupons, cartIncentive, reviews, videoCards, miniPlayer, assistant, sizeGuide, delivery]) {
+  for (const def of [header, categoryTabs, gallery, share, coupons, cartIncentive, reviews, videoCards, miniPlayer, assistant, sizeGuide, delivery, cookieNotice]) {
     registerModule(def);
   }
 }

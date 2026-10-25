@@ -1,7 +1,7 @@
 # personalizacoes-ink — rodada 2
 
 Produto independente de funcionalidades por assinatura para lojas Reserva INK (nome interno, não é marca).
-Uma base compartilhada, 12 módulos configuráveis por loja, painel de operador e de lojista, liberação por pacotes e
+Uma base compartilhada, 13 módulos configuráveis por loja, painel de operador e de lojista, liberação por pacotes e
 instalação repetível. Tudo roda **localmente**. Não houve deploy, DNS, rota ou alteração em loja real.
 
 > O painel não tem domínio próprio e escuta só em `127.0.0.1`: não expor na internet.
@@ -100,6 +100,7 @@ Legenda:
 | M10 Assistente | **A** | Vista: "tem estampa de mãe?" → peças e a coleção Mães; "camiseta de pai" → coleção Pais (o tipo de peça não vira tema); "cachorro" → Pets; "namorado" → Casais; "presente pra vó" e "abelha" → busca da INK (com trecho do nome: "abelh" acha "Abelhinhas"); tema inexistente → "Não encontrei peças com…" e atendimento; dúvida → base de respostas. Testes: rastreio pelo canal nativo, recusa CPF e cartão, limites por visita e por dia | **Sem IA** (decisão do dono): base de respostas da loja, coleções do menu (com sinônimos comuns: papai, mamãe, filho, pet, namorado, fé) e busca nativa da INK. Nomes repetidos (uma cor por produto na INK) aparecem uma vez. Nenhuma chamada externa além da própria loja |
 | M11 Guia de medidas | **B** | jsdom: tabela da modelagem pelo nome ou categoria, ao lado do guia nativo, sugestão explicável comparando com uma peça da pessoa (sem altura e peso) | Tabelas cadastradas pela loja. **Complementa** o guia nativo da INK |
 | M12 Prazo de entrega | **A** | Vista: data real da INK para o CEP 01001-000 ("Entrega entre …"), pelo formulário de CEP da própria INK. Produção aparece separada | `delivery_estimates` da INK (formulário nativo; o módulo não chama o endpoint por fora) |
+| M13 Aviso de cookies | **A** | Vista: o aviso nativo da INK vira cartão no canto (computador) ou cartão compacto no rodapé (celular), com as cores e os cantos da identidade, acima da barra de compra do celular; o assistente sobe só do lado do aviso. `check:loja` com o M13 ligado (flutuantes não cobrem o aviso). jsdom: texto e botão trocáveis mantendo o link da Política de Privacidade e a ação de aceite da INK; desmontar devolve o original | `.cookie-acceptance` da INK: quem mostra, esconde e guarda o aceite continua sendo a INK |
 
 **Complementos do InkBoost:**
 - cupom de 1ª compra perto do preço: M05;
@@ -131,7 +132,7 @@ A Vista usa o layout novo da INK; outras lojas usam o clássico. Os módulos for
   - lojas: isolamento A/B, publicação, liga/desliga só do módulo, restauração, liberação e pausa;
   - acesso por cliente em todas as rotas de loja, CSRF, Host, Origin e convites;
   - Worker em workerd: injeção só onde roda módulo, HTML idêntico sem módulo, falha fechada, prévia com `frame-ancestors`, mídia com Range, proxy só leitura sem analytics nem cookies, POST de carrinho só por liberação e nunca checkout;
-  - os 12 módulos em jsdom sobre páginas gravadas da INK;
+  - os 13 módulos em jsdom sobre páginas gravadas da INK;
   - parsers;
   - assistente;
   - reinício real do processo.

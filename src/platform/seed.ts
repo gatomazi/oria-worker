@@ -7,7 +7,7 @@ export const DEMO_ORIGIN_PORTS = { 'demo-aurora': 4101, 'demo-trilha': 4102 } as
 export function seed(stores: StoreService): void {
   if (!stores.listPackages().length) {
     // Agrupamentos administráveis. Nomes e preços comerciais ainda não foram definidos.
-    stores.savePackage({ id: 'vitrine', name: 'Vitrine', description: 'Navegação e apresentação da loja.', modules: ['header', 'categoryTabs', 'gallery', 'share', 'coupons'] }, null);
+    stores.savePackage({ id: 'vitrine', name: 'Vitrine', description: 'Navegação e apresentação da loja.', modules: ['header', 'categoryTabs', 'gallery', 'share', 'coupons', 'cookieNotice'] }, null);
     stores.savePackage({ id: 'conversao', name: 'Conversão', description: 'Carrinho, avaliações e informações de compra.', modules: ['cartIncentive', 'reviews', 'sizeGuide', 'delivery'] }, null);
     stores.savePackage({ id: 'conteudo', name: 'Conteúdo e atendimento', description: 'Vídeos com produtos e assistente.', modules: ['videoCards', 'miniPlayer', 'assistant'] }, null);
   }

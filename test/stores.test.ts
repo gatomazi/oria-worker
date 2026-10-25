@@ -14,7 +14,7 @@ test('cadastro de loja: validação, identidade inicial e liberação por pacote
     assert.throws(() => s.stores.createStore({ ...VISTA, id: 'X', domain: 'nao é domínio' }, IDENTITY, null), (e: any) => e.errors.some((x: any) => x.field === 'id') && e.errors.some((x: any) => x.field === 'domain'));
     const st = s.stores.createStore(VISTA, IDENTITY, null);
     assert.equal(st.devOrigin, 'https://www.vistaentrenos.com.br');
-    assert.deepEqual([...s.stores.entitled(st)].sort(), ['categoryTabs', 'coupons', 'gallery', 'header', 'share']);
+    assert.deepEqual([...s.stores.entitled(st)].sort(), ['categoryTabs', 'cookieNotice', 'coupons', 'gallery', 'header', 'share']);
     const view = s.stores.view(st.id);
     assert.equal(view.draft.config.identity.primary, '#50313D');
     assert.equal(view.published, null);
@@ -67,6 +67,12 @@ test('ligar/desligar um módulo publica só ele; edições pendentes não vão j
     assert.equal(s.stores.publicConfig('demo-aurora')!.modules.share, undefined);
     assert.throws(() => s.stores.setModuleState('demo-aurora', 'share', false, null), /já está desligado/);
     assert.throws(() => s.stores.setModuleState('demo-aurora', 'videoCards', true, null), /não liberado/);
+    // Módulo liberado mas incompleto (guia de medidas sem tabela) não liga direto na loja.
+    assert.throws(
+      () => s.stores.setModuleState('demo-aurora', 'sizeGuide', true, null),
+      (e: { message: string; errors?: { field: string }[] }) => /não pode ser ligado/.test(e.message) && !!e.errors?.some((x) => x.field.startsWith('modules.sizeGuide.')),
+    );
+    assert.equal(s.stores.publicConfig('demo-aurora')!.modules.sizeGuide, undefined);
   } finally {
     s.close();
   }

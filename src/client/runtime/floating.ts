@@ -54,16 +54,20 @@ export class Floating {
       const blocked = this.blocked();
       const anyPanel = [...this.widgets.values()].find((w) => w.isPanelOpen());
       const vh = window.innerHeight;
-      const occupied = (el: HTMLElement | null) => {
+      const mid = window.innerWidth / 2;
+      // Quanto de baixo da tela um elemento ocupa, só do lado em que ele está (um aviso
+      // em cartão no canto esquerdo não empurra o assistente do canto direito).
+      const occupied = (el: HTMLElement | null, side: 'left' | 'right') => {
         if (!el || el.hidden || el.getClientRects().length === 0) return 0;
         const r = el.getBoundingClientRect();
-        return r.top < vh && r.bottom > vh - 200 ? Math.max(0, vh - r.top) : 0;
+        const onSide = side === 'left' ? r.left < mid : r.right > mid;
+        return onSide && r.top < vh && r.bottom > vh - 200 ? Math.max(0, vh - r.top) : 0;
       };
-      const bottomBar = Math.max(occupied(ink.mobileBuyBar()), occupied(ink.cookieBanner()));
+      const bottomBar = (side: 'left' | 'right') => Math.max(occupied(ink.mobileBuyBar(), side), occupied(ink.cookieBanner(), side));
       const help = ink.helpButton();
       const helpRect = help && help.getClientRects().length ? help.getBoundingClientRect() : null;
       const helpOnRight = !!helpRect && helpRect.left > window.innerWidth / 2;
-      const stack: Record<'left' | 'right', number> = { left: 16 + bottomBar, right: 16 + bottomBar };
+      const stack: Record<'left' | 'right', number> = { left: 16 + bottomBar('left'), right: 16 + bottomBar('right') };
       if (helpRect && helpOnRight) stack.right = Math.max(stack.right, vh - helpRect.top + 12);
       if (helpRect && !helpOnRight) stack.left = Math.max(stack.left, vh - helpRect.top + 12);
       for (const w of this.widgets.values()) {

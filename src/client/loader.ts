@@ -26,6 +26,7 @@ const MODULES: Record<string, () => Promise<{ default: ClientModule }>> = {
   assistant: () => import('./modules/assistant.ts'),
   sizeGuide: () => import('./modules/size-guide.ts'),
   delivery: () => import('./modules/delivery.ts'),
+  cookieNotice: () => import('./modules/cookie-notice.ts'),
 };
 /** Não competem com a foto principal nem com a compra: só depois do load/ocioso. */
 const DEFERRED = new Set(['videoCards', 'miniPlayer', 'assistant', 'reviews']);

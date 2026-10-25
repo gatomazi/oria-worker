@@ -9,9 +9,9 @@ import { coupon } from './helpers.ts';
 const store = { id: 'loja-a', basePath: '/loja' };
 const all = new Set(moduleDefs().map((d) => d.id));
 
-test('registro tem os 12 módulos do catálogo, cada um com esquema, padrões e projeção', () => {
+test('registro tem os 13 módulos do catálogo, cada um com esquema, padrões e projeção', () => {
   const codes = moduleDefs().map((d) => d.code);
-  assert.deepEqual(codes, ['M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M07', 'M08', 'M09', 'M10', 'M11', 'M12']);
+  assert.deepEqual(codes, ['M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M07', 'M08', 'M09', 'M10', 'M11', 'M12', 'M13']);
   for (const d of moduleDefs()) {
     assert.ok(d.fields.length > 0, d.id);
     assert.ok(d.pages.length > 0, d.id);
