@@ -6,11 +6,11 @@
 //  - Pedido/rastreio: encaminha ao canal nativo da INK.
 //  - Sem resposta: encaminha ao atendimento da loja.
 // Nunca pede CPF ou pagamento, nunca altera pedidos, não inventa prazos.
-import type { CardProduct } from '../shared/ink-parse.ts';
+import { formatBrl, type CardProduct } from '../shared/ink-parse.ts';
 import type { CatalogReader } from './catalog.ts';
 import type { Store, StoreService } from './stores.ts';
 import type { Db } from './db.ts';
-import type { IntegrationService, SiteData } from './integration.ts';
+import type { ApiProduct, IntegrationService, SiteData } from './integration.ts';
 import { verifyPreviewToken } from './tokens.ts';
 
 export interface AssistantReply {
@@ -223,6 +223,12 @@ export class AssistantService {
     let searchPath: string | null = null;
     try {
       if (collections.length) products = await this.catalog.products(store, collections[0]!.path);
+      // Com a API da INK: índice de produtos publicados (nome, tags e tipo), mais vendidos primeiro.
+      const indexed = !products.length ? this.integration?.apiData(store.id)?.products : undefined;
+      if (indexed?.length) {
+        products = searchIndex(indexed, terms, themes);
+        if (products.length) searchPath = `${store.integration.searchPath || `${store.basePath}/products`}?search_filter=${encodeURIComponent(themes[0] ?? terms[0]!)}`;
+      }
       if (!products.length) {
         const searchBase = store.integration.searchPath || `${store.basePath}/products`;
         let used = terms.join(' ');
@@ -249,6 +255,43 @@ export class AssistantService {
     const phone = moduleWhats || storeWhats;
     return phone ? { label, url: `https://wa.me/${phone}` } : null;
   }
+}
+
+/**
+ * Procura no índice da API: tema nas tags pesa mais que no nome; tipo de peça só desempata.
+ * Exige que todo tema apareça (nome, tags ou tipo); empate vai para o mais vendido.
+ */
+export function searchIndex(products: ApiProduct[], terms: string[], themes: string[]): CardProduct[] {
+  const want = themes.length ? themes : terms;
+  const garments = terms.filter((t) => GARMENTS.has(t));
+  const hit = (words: string[], t: string) => {
+    const tt = singular(t);
+    return words.some((w) => w === tt || (tt.length >= 4 && w.length >= 4 && (w.startsWith(tt) || tt.startsWith(w))));
+  };
+  const wordsOf = (s: string) => fold(s).split(/[^a-z0-9]+/).filter(Boolean).map(singular);
+  return products
+    .map((p) => {
+      const name = wordsOf(p.name);
+      const tags = p.tags.flatMap(wordsOf);
+      const type = wordsOf(p.type);
+      let score = 0;
+      for (const t of want) {
+        const s1 = (hit(tags, t) ? 3 : 0) + (hit(name, t) ? 2 : 0);
+        if (!s1) return { p, score: 0 };
+        score += s1;
+      }
+      for (const g of garments) if (hit(type, g) || hit(name, g)) score += 1;
+      return { p, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || b.p.sales - a.p.sales)
+    .map(({ p }) => ({
+      id: String(p.id),
+      title: p.name,
+      path: p.path,
+      priceText: p.price === null ? '' : formatBrl(Math.round((p.promotionalPrice ?? p.price) * 100)),
+      imageUrl: p.image,
+    }));
 }
 
 /** Respostas montadas com o que a loja publicou nas páginas da INK. */

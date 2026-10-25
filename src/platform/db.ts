@@ -119,6 +119,11 @@ const MIGRATIONS: string[] = [
     test_message TEXT
   );
   `,
+  // Retrato lido pela API da INK: promoções, categorias e índice de produtos.
+  `
+  ALTER TABLE ink_api ADD COLUMN api_data TEXT;
+  ALTER TABLE ink_api ADD COLUMN api_at TEXT;
+  `,
 ];
 
 export type Db = DatabaseSync;

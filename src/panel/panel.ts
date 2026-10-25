@@ -4,6 +4,7 @@ import '../shared/modules/index.ts';
 import { DEFAULT_IDENTITY, IDENTITY_FIELDS, type Identity } from '../shared/identity.ts';
 import { contrastRatio, withDefaults, type Field, type FieldError, type Values } from '../shared/fields.ts';
 import type { IntegrationStatus, SiteCoupon } from '../platform/integration.ts';
+import { promotionSummary, promotionToCampaign, promotionToIncentive, SCOPE_TEXT, tierLines, type InkPromotion } from '../shared/ink-promotions.ts';
 import { moduleDef, moduleDefs, parseStoreConfig, toPublicConfig, type StoreConfig, type Video } from '../shared/registry.ts';
 import { api, ApiError, setCsrf } from './api.ts';
 import { buildForm, h, type FormHandle } from './form.ts';
@@ -1098,6 +1099,75 @@ async function viewEditor(id: string): Promise<void> {
         });
       });
       const a = st.api;
+      // Dados lidos pela API: promoções, categorias e produtos.
+      const apiBlocks: Node[] = [];
+      if (a.data) {
+        const d = a.data;
+        const colPath = (cid: number) => d.collections.find((c) => c.id === cid)?.path ?? null;
+        const TYPE: Record<InkPromotion['type'], string> = { standard: 'Desconto', progressive: 'Progressiva', unit_free: 'Leve N, pague N-1' };
+        const promoRow = (pr: InkPromotion) => {
+          const camps = list(draft.modules.coupons?.settings.campaigns);
+          const inM05 = camps.some((x) => String(x.code).toUpperCase() === pr.code.toUpperCase());
+          const asCampaign = promotionToCampaign(pr);
+          const asIncentive = promotionToIncentive(pr, colPath);
+          const toM05 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asCampaign || inM05 || !can('coupons') }, inM05 ? 'Já no M05' : 'Cupom no M05');
+          toM05.title = asCampaign ? '' : 'Promoção automática: a INK aplica sozinha, não há código para o cliente copiar.';
+          toM05.addEventListener('click', () =>
+            editModule('coupons', (set) => {
+              if (list(set.campaigns).length >= 6) return 'O M05 já tem 6 campanhas: remova uma antes.';
+              set.campaigns = [...list(set.campaigns), asCampaign!];
+              paint();
+              return `Cupom ${pr.code} adicionado ao M05.`;
+            }),
+          );
+          const toM06 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asIncentive || !can('cartIncentive') }, 'Metas no M06');
+          toM06.addEventListener('click', () => {
+            const cur = list(draft.modules.cartIncentive?.settings.tiers);
+            if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do M06 pelas da promoção ${pr.code}?`)) return;
+            editModule('cartIncentive', (set) => {
+              Object.assign(set, asIncentive);
+              const many = pr.scope !== 'all' && set.eligibility !== 'colecao';
+              return `Metas da promoção ${pr.code} levadas ao M06.${many ? ' Atenção: a promoção não vale para a loja toda; confira os itens participantes no M06.' : ''}`;
+            });
+          });
+          const status = !pr.available ? (pr.startsAt && Date.parse(pr.startsAt) > Date.now() ? 'agendada' : 'fora do ar') : pr.automatic ? 'automática' : 'com código';
+          return h(
+            'li',
+            { class: 'int-promo' },
+            h('div', {}, h('code', {}, pr.code), ' ', h('span', { class: `pill ${pr.available ? 'on' : 'warn'}` }, status), ' ', h('span', { class: 'chip' }, TYPE[pr.type]), h('br'), h('span', {}, tierLines(pr).join(' · ') || promotionSummary(pr)), h('br'), h('span', { class: 'help' }, [pr.firstPurchase ? 'Só na primeira compra.' : '', SCOPE_TEXT[pr.scope], pr.expiresAt ? `Até ${when(pr.expiresAt)}.` : ''].filter(Boolean).join(' '))),
+            h('div', { class: 'row' }, toM05, toM06),
+          );
+        };
+        const live = d.promotions.filter((x) => x.available);
+        const later = d.promotions.filter((x) => !x.available);
+        apiBlocks.push(
+          h('h3', {}, `Promoções na INK (${live.length} no ar${later.length ? `, ${later.length} fora do ar ou agendadas` : ''})`),
+          d.promotions.length ? h('ul', { class: 'int-list plain' }, ...[...live, ...later].map(promoRow)) : h('p', { class: 'empty' }, 'Nenhuma promoção cadastrada na INK.'),
+        );
+        const cols = d.collections.filter((c) => c.products > 0);
+        const toM02 = h('button', { type: 'button', class: 'btn btn-small', disabled: !cols.length || !can('categoryTabs') }, 'Usar as 6 primeiras no M02');
+        toM02.addEventListener('click', () => {
+          const cur = list(draft.modules.categoryTabs?.settings.tabs);
+          if (cur.length && !confirm(`Substituir as ${cur.length} aba(s) atuais do M02 pelas categorias da INK, na ordem do menu?`)) return;
+          editModule('categoryTabs', (set) => {
+            set.tabs = cols.slice(0, 6).map((c) => ({ label: c.name.slice(0, 30), path: c.path }));
+            return 'Abas do M02 preenchidas com as categorias da INK, na ordem do menu.';
+          });
+        });
+        apiBlocks.push(
+          h('div', { class: 'row-between' }, h('h3', {}, `Categorias (${d.collections.length})`), toM02),
+          h('p', { class: 'help' }, cols.map((c) => `${c.name} (${c.products})`).join(' · ') || 'Nenhuma categoria com produtos.'),
+          h('h3', {}, `Produtos publicados (${d.products.total})`),
+          h(
+            'p',
+            { class: 'help' },
+            `O M10 Assistente procura por estampa no nome, nas tags (${d.products.withTags} produtos com tags) e no tipo da peça, mais vendidos primeiro. ${d.products.clusters} estampas têm mais de uma versão agrupada na INK (base para um "Também disponível em").`,
+          ),
+          ...(d.products.bestSellers.length ? [h('p', {}, h('strong', {}, 'Mais vendidos: '), d.products.bestSellers.map((x) => `${x.name} (${x.sales})`).join(' · '))] : []),
+          ...d.problems.map((pb) => h('p', { class: 'error-text' }, `${pb.resource}: ${pb.message}`)),
+          h('p', { class: 'help' }, `Lido em ${when(d.at)}. Renovado junto com a leitura da loja.`),
+        );
+      }
       const apiCard = h(
         'section',
         { class: 'card stack' },
@@ -1110,7 +1180,8 @@ async function viewEditor(id: string): Promise<void> {
           h('span', { class: 'help' }, a.configured ? `Token terminado em …${a.hint}, guardado em ${when(a.setAt!)}.${a.testedAt ? ` ${a.testMessage} (${when(a.testedAt)})` : ''}` : 'Sem token: os dados vêm só da leitura da loja.'),
         ),
         h('div', { class: 'row' }, tokenIn, saveTok, testTok, delTok),
-        h('p', { class: 'help' }, h('strong', {}, 'Cupons e promoções pela API: ainda não. '), 'Não há rota conhecida da API da INK para listar cupons e promoções progressivas. Quando a INK confirmar uma (api@reserva.ink), a busca entra aqui. Até lá, eles vêm da leitura da loja acima ou do cadastro manual nos módulos.'),
+        a.configured ? null : h('p', { class: 'help' }, 'Com o token, o painel lê promoções (desconto, progressiva e leve N pague N-1), categorias e produtos publicados. Escopos de leitura necessários: store.promotions.read, store.categories.read e store.products.read. Gere no painel da INK, em Credenciais da API.'),
+        ...apiBlocks,
       );
 
       box.replaceChildren(
