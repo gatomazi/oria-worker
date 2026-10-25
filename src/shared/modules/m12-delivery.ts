@@ -1,6 +1,8 @@
 import type { ModuleDef } from '../registry.ts';
 import { color } from './common.ts';
 
+const LEGACY_NOTE = 'A data de entrega é calculada pela INK para o CEP informado.';
+
 export const delivery: ModuleDef = {
   id: 'delivery',
   code: 'M12',
@@ -30,7 +32,7 @@ export const delivery: ModuleDef = {
     productionMax: 7,
     productionLabel: 'Produção sob demanda: {min} a {max} dias úteis',
     calculator: true,
-    note: 'A data de entrega é calculada pela INK para o CEP informado.',
+    note: 'Prazo estimado para o CEP informado.',
     position: 'abaixo-comprar',
     accent: 'primary',
   },
@@ -45,7 +47,8 @@ export const delivery: ModuleDef = {
     productionMax: s.productionMax,
     productionLabel: s.productionLabel,
     calculator: s.calculator,
-    note: s.note,
+    // O texto padrão antigo citava a plataforma; o cliente da loja vê só o cálculo.
+    note: s.note === LEGACY_NOTE ? 'Prazo estimado para o CEP informado.' : s.note,
     position: s.position,
     colors: color(ctx, s.accent),
   }),

@@ -549,7 +549,8 @@ test('M12: produção separada e CEP pelo formulário da própria INK', async ()
   root.querySelector('form')!.dispatchEvent(new env.window.Event('submit', { cancelable: true }));
   await env.tick(60);
   assert.equal(submitted, 1);
-  assert.match(root.textContent ?? '', /Entrega entre Quinta, 29 de Outubro.*cálculo da INK/);
+  assert.match(root.textContent ?? '', /Entrega entre 29\/10 e 30\/10\.Para o CEP 01001-000/);
+  assert.doesNotMatch(root.textContent ?? '', /INK/, 'o cliente vê só o cálculo');
   assert.deepEqual(env.posts, [], 'não chama endpoint por fora');
 });
 
@@ -572,4 +573,14 @@ test('M13: aviso de cookies nativo com a cara da loja; texto trocado mantém o l
   assert.equal(banner.innerHTML, original);
   assert.ok(!banner.hasAttribute('data-pink-cookie'));
   assert.equal(env.document.querySelector('style[data-pink-style="cookieNotice"]'), null);
+});
+
+test('M12: datas do prazo em DD/MM, com ou sem dia da semana; o resto do texto fica', async () => {
+  const { deliveryText } = await import('../src/client/modules/delivery.ts');
+  assert.equal(
+    deliveryText('Entrega entre Sexta, 30 de Outubro e Sábado, 31 de Outubro . Comprando dentro das próximas 16 horas e 34 minutos.'),
+    'Entrega entre 30/10 e 31/10. Comprando dentro das próximas 16 horas e 34 minutos.',
+  );
+  assert.equal(deliveryText('Receba até segunda-feira, 2 de março de 2027'), 'Receba até 02/03');
+  assert.equal(deliveryText('Entrega em 5 dias úteis'), 'Entrega em 5 dias úteis');
 });

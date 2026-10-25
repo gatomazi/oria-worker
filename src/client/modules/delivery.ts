@@ -20,6 +20,22 @@ input{flex:1 1 140px;min-height:42px;border:1px solid #cfcfcf;border-radius:8px;
 .src{font-size:12px;color:#666}
 `;
 
+const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const WEEKDAY = '(?:(?:segunda|terça|terca|quarta|quinta|sexta)(?:-feira)?|sábado|sabado|domingo),?\\s*';
+
+/**
+ * Texto do prazo como a loja escreve ("Entrega entre Sexta, 30 de Outubro e Sábado, 31 de Outubro .")
+ * → datas em DD/MM ("Entrega entre 30/10 e 31/10."). O resto do texto fica como veio.
+ */
+export function deliveryText(raw: string): string {
+  const re = new RegExp(`(?:${WEEKDAY})?(\\d{1,2})\\s+de\\s+(${MONTHS.join('|')})(?:\\s+de\\s+\\d{4})?`, 'gi');
+  return raw
+    .replace(re, (_m, d: string, mon: string) => `${d.padStart(2, '0')}/${String(MONTHS.indexOf(mon.toLowerCase()) + 1).padStart(2, '0')}`)
+    .replace(/\s+([.,;])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const deliveryModule: ClientModule = {
   async mount(ctx: ModuleContext) {
     const s = ctx.settings as { productionMin: number; productionMax: number; productionLabel: string; calculator: boolean; note: string; position: string; colors: { bg: string; fg: string } };
@@ -63,20 +79,20 @@ const deliveryModule: ClientModule = {
           const live = document.querySelector<HTMLFormElement>('#delivery-estimates-content-modal-frame form[action$="/delivery_estimates"], form[data-controller~="ink-store--delivery-estimate"]');
           const liveInput = live?.querySelector<HTMLInputElement>('input[name="postal_code"]');
           if (!live || !liveInput) {
-            res.textContent = 'O cálculo da INK não está disponível nesta página agora.';
+            res.textContent = 'O cálculo de entrega não está disponível agora. Tente de novo em instantes.';
             return;
           }
           liveInput.value = cep.value;
           liveInput.dispatchEvent(new Event('input', { bubbles: true }));
           go.disabled = true;
-          res.textContent = 'Consultando a INK…';
+          res.textContent = 'Calculando…';
           const before = readNative();
           const target = document.querySelector('#remaining_delivery_time');
           waiting?.disconnect();
           const finish = (text: string) => {
             waiting?.disconnect();
             go.disabled = false;
-            res.replaceChildren(text ? h('span', {}, h('strong', {}, text), h('br'), h('span', { class: 'src' }, `CEP ${cep.value} · cálculo da INK`)) : 'A INK não devolveu prazo para este CEP. Confira o CEP ou tente de novo.');
+            res.replaceChildren(text ? h('span', {}, h('strong', {}, deliveryText(text)), h('br'), h('span', { class: 'src' }, `Para o CEP ${cep.value}`)) : 'Não encontramos prazo para este CEP. Confira o CEP ou tente de novo.');
           };
           const timer = setTimeout(() => finish(readNative() !== before ? readNative() : ''), 10000);
           waiting = new MutationObserver(() => {
