@@ -55,7 +55,7 @@ before(async () => {
     panelOrigin: A,
     mailer: s.mailer,
     storeUrl: (x) => `http://${x.devHost}:8787${x.basePath}`,
-    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, probe: async () => ({ status: 200, body: '' }) },
+    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, probe: async () => ({ status: 200, body: '' }), remote: async () => ({ status: 200, body: '' }) },
     integration: s.integration,
   });
   await listen(admin, port);
@@ -136,7 +136,7 @@ test('painel em https: cookie Secure; host e origem só os do painel', async () 
     panelOrigin: 'https://painel.exemplo.com',
     mailer: s.mailer,
     storeUrl: () => '',
-    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth },
+    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, remote: async () => ({ status: 200, body: '' }) },
     integration: s.integration,
   });
   await listen(srv, port);

@@ -27,7 +27,7 @@ before(async () => {
     panelOrigin: `http://127.0.0.1:${port}`,
     mailer: s.mailer,
     storeUrl: (x) => `http://${x.devHost}:8787${x.basePath}`,
-    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, probe: async () => ({ status: 200, body: '<html></html>' }) },
+    install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, probe: async () => ({ status: 200, body: '<html></html>' }), remote: async () => ({ status: 200, body: '<html></html>' }) },
     integration: s.integration,
   });
   await listen(admin, port);
@@ -159,9 +159,10 @@ test('operador cria loja pelo painel, gera convite; lojista define senha e entra
   assert.deepEqual(list.stores.map((x) => x.id), ['terceira-loja']);
   const install = (await (await call(op, 'GET', '/api/stores/terceira-loja/install')).json()) as { status: { id: string; state: string }[]; artifacts: { name: string }[] };
   assert.equal(install.status.find((c) => c.id === 'acesso')?.state, 'ok');
-  assert.deepEqual(install.artifacts.map((a) => a.name), ['instalacao-terceira-loja.md', 'wrangler.terceira-loja.toml', 'config-publicada-terceira-loja.json', 'verificacao-terceira-loja.sh']);
-  const toml = await (await call(op, 'GET', '/api/stores/terceira-loja/install/wrangler.terceira-loja.toml')).text();
-  assert.match(toml, /# routes = \[\{ pattern = "www\.terceira\.com\.br\/terceira\*"/, 'rota fica comentada');
+  assert.deepEqual(install.artifacts.map((a) => a.name), ['instalacao-terceira-loja.md', 'wrangler.oria.toml', 'verificacao-terceira-loja.sh']);
+  assert.equal(install.status.find((c) => c.id === 'producao')?.state, 'pending', 'sem o carregador na página pública, não está instalado');
+  const toml = await (await call(op, 'GET', '/api/stores/terceira-loja/install/wrangler.oria.toml')).text();
+  assert.match(toml, /# \{ pattern = "www\.terceira\.com\.br\/\*", zone_name = "terceira\.com\.br" \}/, 'rota do domínio, comentada até aprovar');
 });
 
 test('prévia: token de uma loja não abre o rascunho de outra; sem token, nada', async () => {
