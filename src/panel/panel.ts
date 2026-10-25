@@ -3,8 +3,8 @@
 import '../shared/modules/index.ts';
 import { DEFAULT_IDENTITY, IDENTITY_FIELDS, type Identity } from '../shared/identity.ts';
 import { contrastRatio, withDefaults, type Field, type FieldError, type Values } from '../shared/fields.ts';
-import type { IntegrationStatus, SiteCoupon } from '../platform/integration.ts';
-import { promotionSummary, promotionToCampaign, promotionToIncentive, SCOPE_TEXT, tierLines, type InkPromotion } from '../shared/ink-promotions.ts';
+import type { IntegrationStatus } from '../platform/integration.ts';
+import { incentiveBlocker, promotionSummary, promotionToCampaign, promotionToIncentive, SCOPE_TEXT, tierLines, type InkPromotion } from '../shared/ink-promotions.ts';
 import { moduleDef, moduleDefs, parseStoreConfig, toPublicConfig, type StoreConfig, type Video } from '../shared/registry.ts';
 import { api, ApiError, setCsrf } from './api.ts';
 import { buildForm, h, type FormHandle } from './form.ts';
@@ -955,20 +955,6 @@ async function viewEditor(id: string): Promise<void> {
       pushPreview();
       flash(`${msg} Está no rascunho: revise em ${def.code}, salve e publique.`);
     };
-    const couponToCampaign = (c: SiteCoupon): Values => {
-      const progressive = c.rules.some((r) => /progressiva/i.test(r));
-      return {
-        title: (progressive ? 'Promoção progressiva' : c.off ? `${c.off}${c.firstPurchase ? ' na primeira compra' : ''}` : `Cupom ${c.code}`).slice(0, 60),
-        description: c.savings.slice(0, 140),
-        code: c.code,
-        conditions: (c.rules.join(' · ') || 'As condições são conferidas no carrinho da loja.').slice(0, 240),
-        startsAt: null,
-        endsAt: null,
-        firstPurchase: c.firstPurchase,
-        nearPrice: false,
-        badge: '',
-      };
-    };
     const can = (mid: string) => view.entitled.includes(mid);
 
     const paint = () => {
@@ -987,28 +973,26 @@ async function viewEditor(id: string): Promise<void> {
 
       const blocks: Node[] = [];
       if (data) {
-        // Cupons
-        const camps = list(draft.modules.coupons?.settings.campaigns);
-        const missing = data.coupons.filter((c) => !camps.some((x) => String(x.code).toUpperCase() === c.code.toUpperCase()));
-        const addCoupons = h('button', { type: 'button', class: 'btn btn-small', disabled: !missing.length || !can('coupons') }, missing.length ? `Adicionar ${missing.length > 1 ? `os ${missing.length}` : 'ao'} M05 Cupons` : 'Já estão no M05');
-        addCoupons.addEventListener('click', () =>
+        // Cupons vistos no produto: valem com certeza só para aquele produto. Em vez de virar
+        // campanha da loja toda, o M05 passa a ler os cupons da INK em cada produto, na hora.
+        const inkOn = draft.modules.coupons?.settings.inkCoupons === true;
+        const readInk = h('button', { type: 'button', class: 'btn btn-small', disabled: inkOn || !can('coupons') }, inkOn ? 'Já lidos em cada produto (M05)' : 'Mostrar em cada produto (M05)');
+        readInk.addEventListener('click', () =>
           editModule('coupons', (set) => {
-            const room = 6 - list(set.campaigns).length;
-            const add = missing.slice(0, Math.max(0, room));
-            set.campaigns = [...list(set.campaigns), ...add.map(couponToCampaign)];
+            set.inkCoupons = true;
             paint();
-            return add.length < missing.length ? `${add.length} cupom(ns) adicionado(s); o M05 aceita até 6.` : `${add.length} cupom(ns) adicionado(s) ao M05.`;
+            return 'Os cupons da INK passam a aparecer na página de cada produto em que valem.';
           }),
         );
         blocks.push(
           h(
             'section',
             { class: 'card stack' },
-            h('div', { class: 'row-between' }, h('h3', {}, `Cupons que a INK mostra nos produtos (${data.coupons.length})`), data.coupons.length ? addCoupons : null),
+            h('div', { class: 'row-between' }, h('h3', {}, `Cupons que a INK mostra nos produtos (${data.coupons.length})`), data.coupons.length ? readInk : null),
             data.coupons.length
               ? h('ul', { class: 'int-list' }, ...data.coupons.map((c) => h('li', {}, h('code', {}, c.code), ' ', h('span', {}, [c.savings, ...c.rules].filter(Boolean).join(' · ')), h('span', { class: 'help' }, ` — visto em "${c.seenOn}"`))))
               : h('p', { class: 'empty' }, 'Nenhum cupom apareceu nos produtos lidos.'),
-            h('p', { class: 'help' }, 'Entram como campanhas do M05 com o mesmo código e as regras escritas pela INK. A INK continua validando no carrinho. Para ler os cupons de cada produto na hora, ligue "Mostrar também os cupons cadastrados na INK" no M05.'),
+            h('p', { class: 'help' }, 'A página do produto não diz se o cupom vale para a loja toda, então ele não vira campanha geral: o M05 mostra cada cupom só nos produtos em que a INK o oferece, com o mesmo código e as mesmas regras. Com a API da INK, os cupons vêm com o alcance e podem virar campanha.'),
           ),
         );
         // Promoção progressiva
@@ -1019,7 +1003,10 @@ async function viewEditor(id: string): Promise<void> {
               { class: 'card stack' },
               h('h3', {}, 'Promoção progressiva'),
               ...data.progressive.map((p) => {
-                const use = h('button', { type: 'button', class: 'btn btn-small', disabled: !can('cartIncentive') }, 'Usar no M06 Incentivo do carrinho');
+                // O texto do produto não informa o alcance: só a pessoa pode confirmar que vale para a loja toda.
+                const use = h('button', { type: 'button', class: 'btn btn-small', disabled: true }, 'Usar no M06 Incentivo do carrinho');
+                const sure = h('input', { type: 'checkbox' });
+                sure.addEventListener('change', () => (use.disabled = !sure.checked || !can('cartIncentive')));
                 use.addEventListener('click', () => {
                   const cur = list(draft.modules.cartIncentive?.settings.tiers);
                   if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do M06 pelas da promoção ${p.code}?`)) return;
@@ -1030,7 +1017,12 @@ async function viewEditor(id: string): Promise<void> {
                     return `Faixas da promoção ${p.code} levadas ao M06.`;
                   });
                 });
-                return h('div', { class: 'row-between' }, h('p', {}, h('code', {}, p.code), ' ', p.tiers.map((t) => `${t.threshold} peças: ${t.label}`).join(' · ')), use);
+                return h(
+                  'div',
+                  { class: 'stack' },
+                  h('div', { class: 'row-between' }, h('p', {}, h('code', {}, p.code), ' ', p.tiers.map((t) => `${t.threshold} peças: ${t.label}`).join(' · ')), use),
+                  h('label', { class: 'check' }, sure, h('span', {}, `Confirmo que a promoção ${p.code} vale para a loja toda. A página do produto não informa o alcance; se ela valer só para parte do catálogo, configure o M06 à mão.`)),
+                );
               }),
               h('p', { class: 'help' }, 'As faixas vêm do texto que a INK mostra no produto. O desconto continua sendo aplicado pela INK.'),
             ),
@@ -1110,6 +1102,7 @@ async function viewEditor(id: string): Promise<void> {
           const inM05 = camps.some((x) => String(x.code).toUpperCase() === pr.code.toUpperCase());
           const asCampaign = promotionToCampaign(pr);
           const asIncentive = promotionToIncentive(pr, colPath);
+          const blocker = asIncentive ? null : incentiveBlocker(pr, colPath);
           const toM05 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asCampaign || inM05 || !can('coupons') }, inM05 ? 'Já no M05' : 'Cupom no M05');
           toM05.title = asCampaign ? '' : 'Promoção automática: a INK aplica sozinha, não há código para o cliente copiar.';
           toM05.addEventListener('click', () =>
@@ -1121,20 +1114,20 @@ async function viewEditor(id: string): Promise<void> {
             }),
           );
           const toM06 = h('button', { type: 'button', class: 'btn btn-small', disabled: !asIncentive || !can('cartIncentive') }, 'Metas no M06');
+          if (blocker) toM06.title = `Não dá para levar ao M06 sem mudar o alcance: ${blocker}`;
           toM06.addEventListener('click', () => {
             const cur = list(draft.modules.cartIncentive?.settings.tiers);
             if (cur.length && !confirm(`Substituir as ${cur.length} faixa(s) atuais do M06 pelas da promoção ${pr.code}?`)) return;
             editModule('cartIncentive', (set) => {
               Object.assign(set, asIncentive);
-              const many = pr.scope !== 'all' && set.eligibility !== 'colecao';
-              return `Metas da promoção ${pr.code} levadas ao M06.${many ? ' Atenção: a promoção não vale para a loja toda; confira os itens participantes no M06.' : ''}`;
+              return `Metas da promoção ${pr.code} levadas ao M06${set.eligibility === 'colecao' ? ', só com os itens da coleção dela' : ''}.`;
             });
           });
           const status = !pr.available ? (pr.startsAt && Date.parse(pr.startsAt) > Date.now() ? 'agendada' : 'fora do ar') : pr.automatic ? 'automática' : 'com código';
           return h(
             'li',
             { class: 'int-promo' },
-            h('div', {}, h('code', {}, pr.code), ' ', h('span', { class: `pill ${pr.available ? 'on' : 'warn'}` }, status), ' ', h('span', { class: 'chip' }, TYPE[pr.type]), h('br'), h('span', {}, tierLines(pr).join(' · ') || promotionSummary(pr)), h('br'), h('span', { class: 'help' }, [pr.firstPurchase ? 'Só na primeira compra.' : '', SCOPE_TEXT[pr.scope], pr.expiresAt ? `Até ${when(pr.expiresAt)}.` : ''].filter(Boolean).join(' '))),
+            h('div', {}, h('code', {}, pr.code), ' ', h('span', { class: `pill ${pr.available ? 'on' : 'warn'}` }, status), ' ', h('span', { class: 'chip' }, TYPE[pr.type]), h('br'), h('span', {}, tierLines(pr).join(' · ') || promotionSummary(pr)), h('br'), h('span', { class: 'help' }, [pr.firstPurchase ? 'Só na primeira compra.' : '', SCOPE_TEXT[pr.scope], pr.expiresAt ? `Até ${when(pr.expiresAt)}.` : ''].filter(Boolean).join(' ')), blocker ? h('span', { class: 'help block' }, `Fica fora do M06: ${blocker}`) : ''),
             h('div', { class: 'row' }, toM05, toM06),
           );
         };

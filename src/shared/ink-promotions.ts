@@ -109,7 +109,8 @@ export function promotionToCampaign(p: InkPromotion): Values | null {
   const title = p.type === 'progressive' ? 'Quanto mais peças, maior o desconto' : p.type === 'unit_free' ? lines[0]!.split(':')[0]! : `${lines[0] ?? p.code}${p.firstPurchase ? ' na primeira compra' : ''}`;
   return {
     title: title.slice(0, 60),
-    description: (p.type === 'progressive' ? lines.join(' · ') : SCOPE_TEXT[p.scope]).slice(0, 140),
+    // O alcance fica na parte visível do cupom (não só nas condições recolhidas).
+    description: (p.type === 'progressive' ? `${lines.join(' · ')} · ${SCOPE_TEXT[p.scope]}` : SCOPE_TEXT[p.scope]).slice(0, 140),
     code: p.code,
     conditions: promotionSummary(p).slice(0, 240),
     startsAt: p.startsAt,
@@ -120,12 +121,22 @@ export function promotionToCampaign(p: InkPromotion): Values | null {
   };
 }
 
+/** Por que uma promoção não pode virar metas do M06 sem mudar o alcance dela. null = pode. */
+export function incentiveBlocker(p: InkPromotion, collectionPath?: (id: number) => string | null): string | null {
+  if (p.scope === 'all') return null;
+  if (p.scope === 'collections' && p.collectionIds.length === 1 && collectionPath?.(p.collectionIds[0]!)) return null;
+  if (p.scope === 'collections') return 'vale para várias coleções; o incentivo do carrinho conta uma coleção só ou a loja toda.';
+  return p.scope === 'products' ? 'vale só para produtos selecionados; o incentivo do carrinho não separa produtos.' : 'vale só para alguns tipos de peça; o incentivo do carrinho não separa tipos.';
+}
+
 /**
- * Faixas do M06 (incentivo no carrinho) para promoções com patamar. null quando não há meta.
+ * Faixas do M06 (incentivo no carrinho) para promoções com patamar. null quando não há meta
+ * ou quando importar mudaria o alcance (ver incentiveBlocker): nunca vira oferta para a loja toda.
  * Promoção de uma coleção só: o M06 passa a contar só os itens dela (caminho da coleção).
  */
 export function promotionToIncentive(p: InkPromotion, collectionPath?: (id: number) => string | null): Values | null {
-  const only = p.scope === 'collections' && p.collectionIds.length === 1 ? (collectionPath?.(p.collectionIds[0]!) ?? null) : null;
+  if (incentiveBlocker(p, collectionPath)) return null;
+  const only = p.scope === 'collections' ? collectionPath!(p.collectionIds[0]!)! : null;
   const eligibility = only ? { eligibility: 'colecao', eligiblePath: only } : { eligibility: 'todos' };
   if (p.type === 'unit_free') {
     const n = p.tiers[0]?.minItems;

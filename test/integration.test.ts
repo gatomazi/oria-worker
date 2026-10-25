@@ -171,6 +171,14 @@ test('API da INK: promoções do contrato oficial viram cupom (M05) e metas (M06
       { threshold: 3, benefit: 'percentual', amount: 10, label: '10% OFF' },
     ],
   });
+  // Alcance restrito nunca vira oferta da loja toda: várias coleções / produtos ficam fora do M06.
+  const { incentiveBlocker } = await import('../src/shared/ink-promotions.ts');
+  assert.equal(promotionToIncentive(escada!), null, 'coleção sem caminho conhecido: não importa');
+  assert.match(String(incentiveBlocker(escada!)), /coleç/);
+  const soProdutos = normalizePromotion({ ...PROMOS[1], code: 'SOPRODUTOS', list_type: 'products', product_ids: [1] })!;
+  assert.equal(promotionToIncentive(soProdutos, () => '/x'), null);
+  assert.match(String(incentiveBlocker(soProdutos)), /produtos selecionados/);
+  assert.match(String(promotionToCampaign({ ...soProdutos, automatic: false })!.description), /Só em produtos selecionados/, 'alcance visível no cupom');
   assert.deepEqual(tierLines(leve!), ['Leve 5, pague 4: a peça mais barata sai grátis']);
   assert.equal((promotionToIncentive(leve!)!.tiers as { benefit: string }[])[0]!.benefit, 'brinde');
 });
