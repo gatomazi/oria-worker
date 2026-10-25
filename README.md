@@ -16,7 +16,7 @@ pacotes, operação hospedada preparada e instalação repetível.
 npm install
 npm run dev            # build + painel/API + serviço público + réplica INK (Node) + Worker local (wrangler)
 OPERATOR_PASSWORD=… npm run demo:setup   # configura as 2 lojas demo pela API do painel (+ --vista para a loja de teste real)
-npm run check          # typecheck + 103 testes
+npm run check          # typecheck + 104 testes
 npm run e2e            # percurso completo no Chrome (pare o dev antes); grava vídeo e capturas
 OPERATOR_PASSWORD=… npm run check:loja -- <id>   # homologação só de leitura de uma loja, pelo proxy
 INK_TOKEN=… npm run check:api -- <slug>          # homologação da API da INK com token real (não é impresso)
@@ -115,7 +115,7 @@ Legenda:
 | M02 Categorias em abas | **A** | Vista: monta na home com 8 produtos reais da coleção, sem erros e sem rolagem lateral. jsdom: troca de aba muda os produtos e o "Ver todos"; atalhos repetidos só somem depois que as abas carregam | Páginas de coleção/listagem da própria loja (cache de 5 min na sessão) |
 | M03 Galeria com miniaturas | **A** | Vista: miniaturas das 17 fotos reais **numa linha que rola de lado** (padrão; opção de grade no painel): no celular desliza com o dedo, no computador tem setas; as pontas esmaecem quando há mais fotos e a miniatura da foto atual entra na área visível ao trocar a foto pela INK. A página não ganha rolagem lateral. jsdom: uma miniatura por foto navegável, clique aciona só o ponto nativo, variante intacta, acompanha a foto ativa | Carrossel nativo da INK |
 | M04 Compartilhamento | **A** | Vista: monta no produto. jsdom: WhatsApp com mensagem e link canônico limpo, copiar link | Canônico da página |
-| M05 Cupons (único, abas, lista) + selo de 1ª compra | **A** | Vista: bloco na home; **no produto, abas compactas logo abaixo do preço, uma por código** (título configurável, ex.: "Quer cupom? Toma!"; texto da campanha, condições recolhidas e "Copiar" → "Copiado"; cabem 3 códigos no celular, mais que isso rolam de lado com esmaecido na borda); selo "10% na 1ª compra" nos cards, com posição escolhida no painel: no topo da foto à esquerda (padrão), no topo da foto à direita ou abaixo do preço (e2e). Opção de manter o bloco grande no produto. "Usar no carrinho" verificado no carrinho real da Vista: preenche o campo de cupom da INK e não envia (a pessoa confirma lá). jsdom: abas, vigência, copiar sem prometer desconto **Rodada 3:** apresentação **compacta** por dispositivo (uma linha: título, código, Copiar; condições, alcance e validade ao abrir), verificada em 360/390 px; lojas existentes mantêm o bloco, lojas novas começam com o compacto no celular. Importação pela API mostra o alcance na parte visível. | Campanhas cadastradas no painel (as mesmas da INK). Opcional: **cupons cadastrados na INK** lidos do frame nativo `product_promotions` do produto (código, regras, faixas progressivas; "Somente primeira compra" vira selo "R$10,00 OFF na 1ª compra"), sem repetir códigos do painel. O frame é `lazy` na INK: o módulo lê o endereço dele direto, sem esperar a rolagem; os cupons do painel aparecem antes. O selo de um cupom da INK fica só no preço do produto principal (o cupom vale para aquele produto), nunca nos cards de outros. Essa leitura é **B**: testada na estrutura nativa (fixture reduzida, códigos fictícios), porque a Vista não tem cupons nativos |
+| M05 Cupons (único, abas, lista) + selo de 1ª compra | **A** | Verificado na Vista com cupons de teste (removidos nesta rodada: a Vista não tem cupom real na INK e o recurso ficou desligado). Na época: bloco na home; **no produto, abas compactas logo abaixo do preço, uma por código** (título configurável, ex.: "Quer cupom? Toma!"; texto da campanha, condições recolhidas e "Copiar" → "Copiado"; cabem 3 códigos no celular, mais que isso rolam de lado com esmaecido na borda); selo "10% na 1ª compra" nos cards, com posição escolhida no painel: no topo da foto à esquerda (padrão), no topo da foto à direita ou abaixo do preço (e2e). Opção de manter o bloco grande no produto. "Usar no carrinho" verificado no carrinho real da Vista: preenche o campo de cupom da INK e não envia (a pessoa confirma lá). jsdom: abas, vigência, copiar sem prometer desconto **Rodada 3:** apresentação **compacta** por dispositivo (uma linha: título, código, Copiar; condições, alcance e validade ao abrir), verificada em 360/390 px; lojas existentes mantêm o bloco, lojas novas começam com o compacto no celular. Importação pela API mostra o alcance na parte visível. | Campanhas cadastradas no painel (as mesmas da INK). Opcional: **cupons cadastrados na INK** lidos do frame nativo `product_promotions` do produto (código, regras, faixas progressivas; "Somente primeira compra" vira selo "R$10,00 OFF na 1ª compra"), sem repetir códigos do painel. O frame é `lazy` na INK: o módulo lê o endereço dele direto, sem esperar a rolagem; os cupons do painel aparecem antes. O selo de um cupom da INK fica só no preço do produto principal (o cupom vale para aquele produto), nunca nos cards de outros. Essa leitura é **B**: testada na estrutura nativa (fixture reduzida, códigos fictícios), porque a Vista não tem cupons nativos |
 | M06 Incentivo no carrinho + confirmação após adicionar | **A** | Vista (proxy com carrinho liberado, item de teste removido no fim): adicionar pela página do produto mostra o incentivo no modal "Produto adicionado" da INK; na gaveta, "Faltam 1 peça…" com 1 item e troca de faixa ao aumentar a quantidade. Marcação real capturada em `test/fixtures/ink/cart-drawer-com-item.html` e `last-added-product.html` (tokens removidos). jsdom: faixas, frete nativo com prioridade, participação por coleção pelo id do produto | Gaveta `turbo-frame#cart` e modal `#last_added_product` da INK. A INK **substitui** o `#last_added_product` a cada adição (o módulo refaz a observação). O item do carrinho não tem link do produto: a participação por coleção usa o id |
 | M07 Avaliações com fotos | **B** | Parser e módulo sobre a marcação real da INK (avaliações da Use Origens, só nos testes). A foto abre o depoimento de origem. Sem nota geral. **Nota mínima** (padrão 4★; avaliação 2★ some da vitrine, aparece com "todas") e "só com texto" nas recentes. Loja sem avaliações não mostra nada | `/reviews` da própria loja. **A Vista ainda não tem avaliações** |
 | M08 Cards de vídeo | **B** | Painel no Chrome: envio de arquivo de vídeo, vínculo no M08, publicação e card novo na loja. Réplica e jsdom: cards no início, vídeos vinculados na página do produto, player sem som automático com a peça (nome e preço da página real) | Biblioteca de vídeos da loja (envio de arquivo ou https; servido com Range) |
@@ -150,7 +150,7 @@ A Vista usa o layout novo da INK; outras lojas usam o clássico. Os módulos for
 
 ## Verificações executadas
 
-- **`npm run check`** (103 testes) cobre:
+- **`npm run check`** (104 testes) cobre:
   - registro e esquema;
   - lojas: isolamento A/B, publicação, liga/desliga só do módulo, restauração, liberação e pausa;
   - acesso por cliente em todas as rotas de loja, CSRF, Host, Origin e convites;
@@ -166,11 +166,12 @@ A Vista usa o layout novo da INK; outras lojas usam o clássico. Os módulos for
     artefatos de instalação e `wrangler deploy --dry-run`, configuração guiada (origem, "editado por você",
     confirmação de alcance, só recurso pronto), importação que não amplia alcance, cupom compacto, atalhos da ajuda
     no assistente.
-- **`npm run e2e`** (33 verificações, Chrome):
+- **`npm run e2e`** (34 verificações, Chrome):
   - operador cria a Vista pelo painel e gera o convite;
   - lojista aceita o convite, começa pela **configuração guiada** (leitura da loja real, conteúdo com origem,
     conjuntos de recursos, conferência) e conclui depois de publicar;
   - lojista vê os nomes dos recursos, sem códigos; configura M05, M02, M03 e M12 pelos formulários;
+  - lista de campanhas: reordenar, trocar de seção e de prévia sem perder valores, erro abre o item com foco no campo;
   - a prévia ao vivo esconde o módulo desativado no rascunho;
   - salvar, publicar e conferir na loja real pelo proxy;
   - CEP real da INK;
@@ -180,7 +181,12 @@ A Vista usa o layout novo da INK; outras lojas usam o clássico. Os módulos for
   - assistente: "tem estampa de mãe?" traz peças e a coleção Mães;
   - instalação, painel no celular, demos, sem erros de JavaScript dos módulos.
   - Vídeos em `docs/demo/`, capturas em `docs/capturas/r2-*` e `r3-*` (configuração guiada pela visão do lojista).
-- **`check:loja`**: em computador e celular, módulos montados, sem erros, sem rolagem horizontal e, no celular, **botões flutuantes sem cobrir a barra de compra, o aviso de cookies nem a ajuda da INK**. Vista: 18 de 18 (com carrinho, assistente e cabeçalho ligados).
+- **`check:loja`**: em computador e celular, módulos montados, sem erros, sem rolagem horizontal e, no celular, **botões flutuantes sem cobrir a barra de compra, o aviso de cookies nem a ajuda da INK**. Vista, Aurora e Trilha: 18 de 18 cada (rodada 3, com o aviso de cookies, o atendimento único e o cupom compacto).
+- **Layout clássico da INK** (rodada 3, Chrome sobre páginas gravadas de duas lojas de referência, só leitura): logo
+  sem cobrir a busca nem os controles e sem vazar do cabeçalho em 360, 390 e 1440 px, com a busca recolhida e em
+  barra, para logos quadrado, horizontal, vertical e o atual.
+- **Migração** (rodada 3): o banco real de antes da rodada migrado com o código atual preserva lojas, acessos, as 18
+  versões, rascunhos, mídia e integração.
 
 **Carregamento:**
 - O carregador tem 10 KB; cada módulo é um arquivo próprio, baixado só onde roda.

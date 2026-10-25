@@ -19,8 +19,10 @@ test('configuração hospedada: exige origens https distintas, segredo e credenc
   assert.throws(() => loadConfig({ ORIA_MODE: 'hosted', PANEL_ORIGIN: 'http://painel.exemplo.com', PUBLIC_ORIGIN: 'https://api.exemplo.com', APP_SECRET: Buffer.alloc(32).toString('base64') }), /precisa ser https/);
   assert.throws(() => loadConfig({ ORIA_MODE: 'hosted', PANEL_ORIGIN: 'https://painel.exemplo.com', PUBLIC_ORIGIN: 'https://api.exemplo.com', APP_SECRET: 'abc' }), /32 bytes/);
   assert.throws(() => loadConfig({ ORIA_MODE: 'hosted', PANEL_ORIGIN: 'https://p.exemplo.com', PUBLIC_ORIGIN: 'https://a.exemplo.com', APP_SECRET: Buffer.alloc(32, 1).toString('base64'), MEDIA_BACKEND: 'r2' }), /R2_ACCOUNT_ID.*R2_BUCKET/);
+  assert.throws(() => loadConfig({ ORIA_MODE: 'hosted', PANEL_ORIGIN: 'https://p.exemplo.com', PUBLIC_ORIGIN: 'https://a.exemplo.com', APP_SECRET: Buffer.alloc(32, 1).toString('base64') }), /TEST_HOST_SUFFIX/);
   const hosted = loadConfig({
     ORIA_MODE: 'hosted',
+    TEST_HOST_SUFFIX: '.Teste.Exemplo.com',
     PANEL_ORIGIN: 'https://painel.exemplo.com/',
     PUBLIC_ORIGIN: 'https://api.exemplo.com',
     APP_SECRET: Buffer.alloc(32, 1).toString('base64'),
@@ -31,6 +33,7 @@ test('configuração hospedada: exige origens https distintas, segredo e credenc
   assert.equal(hosted.panelOrigin, 'https://painel.exemplo.com');
   assert.equal(hosted.seedDemo, false, 'sem lojas demo no ambiente hospedado');
   assert.equal(hosted.syncEveryMin, 60);
+  assert.equal(hosted.testHostSuffix, 'teste.exemplo.com');
   assert.equal(testStoreUrl(hosted, { devHost: 'vista.teste.exemplo.com', basePath: '/vistaentrenos' }), 'https://vista.teste.exemplo.com/vistaentrenos');
 });
 
@@ -263,6 +266,7 @@ test('processo hospedado de verdade: sobe com as variáveis de produção, separ
       PANEL_ORIGIN: 'https://painel.exemplo.com',
       PUBLIC_ORIGIN: 'https://api.exemplo.com',
       APP_SECRET: Buffer.alloc(32, 7).toString('base64'),
+      TEST_HOST_SUFFIX: 'teste.exemplo.com',
       OPERATOR_EMAIL: 'op@exemplo.com',
       OPERATOR_PASSWORD: 'senha-do-operador',
       SYNC_EVERY_MIN: '0',
@@ -332,3 +336,19 @@ test('cópia e restauração do banco: VACUUM INTO, integridade, banco anterior 
 function rmSyncSafe(dir: string) {
   void import('node:fs').then(({ rmSync }) => rmSync(dir, { recursive: true, force: true }));
 }
+
+test('hospedado: loja nova recebe o endereço de teste <id>.<TEST_HOST_SUFFIX>; um host, uma loja', async () => {
+  const { VISTA, IDENTITY } = await import('./helpers.ts');
+  const st = stack();
+  try {
+    st.stores.testHostSuffix = 'teste.exemplo.com';
+    const created = st.stores.createStore({ ...VISTA, devHost: '' }, IDENTITY, null);
+    assert.equal(created.devHost, 'vista-entre-nos.teste.exemplo.com');
+    assert.equal(st.stores.byHost('vista-entre-nos.teste.exemplo.com')?.id, created.id);
+    assert.equal(st.stores.byHost('www.vistaentrenos.com.br')?.id, created.id);
+    assert.throws(() => st.stores.createStore({ ...VISTA, id: 'outra', devHost: 'vista-entre-nos.teste.exemplo.com', domain: 'outra.exemplo.com' }, IDENTITY, null), (e: { errors?: { field: string }[] }) => !!e.errors?.some((x) => x.field === 'devHost'));
+    assert.throws(() => st.stores.createStore({ ...VISTA, id: 'copia', devHost: 'copia.teste.exemplo.com' }, IDENTITY, null), (e: { errors?: { field: string }[] }) => !!e.errors?.some((x) => x.field === 'domain'), 'domínio já cadastrado');
+  } finally {
+    st.close();
+  }
+});

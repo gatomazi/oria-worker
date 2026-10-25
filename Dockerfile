@@ -14,6 +14,7 @@ RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY src ./src
 COPY scripts/backup.mjs scripts/restore.mjs ./scripts/
-USER node
+# Volume do Railway: imagem sem USER fixo. A doc do Railway avisa que imagens com usuário não-root
+# têm problema de permissão no volume (alternativa documentada: RAILWAY_RUN_UID=0).
 EXPOSE 8080
 CMD ["node", "src/platform/main.ts"]

@@ -44,6 +44,7 @@ const db = openDb(cfg.dataDir);
 const secret = cfg.secretB64 ? Buffer.from(cfg.secretB64, 'base64') : loadSecret(cfg.dataDir);
 const auth = new Auth(db);
 const stores = new StoreService(db);
+stores.testHostSuffix = cfg.testHostSuffix;
 seed(stores, { demos: cfg.seedDemo });
 const blobs =
   cfg.media.backend === 'r2'

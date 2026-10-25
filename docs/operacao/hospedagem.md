@@ -7,7 +7,9 @@ Decisão de arquitetura: [`docs/decisoes/0001-hospedagem.md`](../decisoes/0001-h
 
 1. Novo serviço a partir do repositório (usa `Dockerfile` e `railway.json`; instância única).
 2. **Volume** montado em `/data`.
-3. Variáveis: ver `.env.example` (`PANEL_ORIGIN`, `PUBLIC_ORIGIN`, `APP_SECRET`, R2, Resend, operador).
+3. Variáveis: ver `.env.example` (`PANEL_ORIGIN`, `PUBLIC_ORIGIN`, `APP_SECRET`, `TEST_HOST_SUFFIX`, R2, Resend, operador).
+   A imagem roda sem usuário fixo para poder gravar no volume (a doc do Railway avisa que imagens não-root
+   têm problema de permissão; alternativa documentada: `RAILWAY_RUN_UID=0`).
 4. Dois domínios apontando para o mesmo serviço: o do painel e o do serviço público. O processo
    separa pelo host; qualquer outro host recebe só o serviço público.
 5. Conferir `GET https://<painel>/health` e `GET https://<serviço>/health` → `{"ok":true}`.
@@ -29,8 +31,9 @@ uma rota `<domínio>/*` por loja instalada, e o ambiente `teste`), `instalacao-<
 `verificacao-<loja>.sh`. Validado localmente com `wrangler deploy --dry-run` (teste automatizado).
 
 - **Teste** (sem mexer no DNS da loja): `npx wrangler deploy -c wrangler.oria.toml --env teste`. Cada loja
-  usa o seu endereço de teste (Operação → Endereço de teste), ex. `vista.teste.<seu-domínio>` com a rota
-  curinga do ambiente `teste`; ou o `oria-lojas-teste.<conta>.workers.dev`, que atende **uma loja por vez**.
+  usa o seu endereço de teste (Operação → Endereço de teste). Lojas novas já nascem com `<loja>.<TEST_HOST_SUFFIX>`
+  (ex. `vista-entre-nos.teste.seudominio.com.br`), atendido pela rota curinga `*.<TEST_HOST_SUFFIX>/*` do ambiente
+  `teste` — a prévia da configuração guiada funciona por aí antes da instalação no domínio; ou o `oria-lojas-teste.<conta>.workers.dev`, que atende **uma loja por vez**.
 - **Domínio real**: a zona da loja na Cloudflare com o registro da INK em proxy; descomentar a rota da
   loja e `npx wrangler deploy -c wrangler.oria.toml`. Ordem segura e retorno no `instalacao-<loja>.md`.
 - `bash verificacao-<loja>.sh <endereço>` confere carregador, arquivos de recurso, configuração da loja

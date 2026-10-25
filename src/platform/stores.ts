@@ -108,6 +108,8 @@ function json<T>(s: unknown, fallback: T): T {
 const nowIso = (now: Date) => now.toISOString();
 
 export class StoreService {
+  /** Sufixo do endereço de teste padrão (<id>.<sufixo>); hospedado: o domínio do Worker de teste. */
+  testHostSuffix = 'localhost';
   private db: Db;
   private now: () => Date;
 
@@ -204,7 +206,7 @@ export class StoreService {
       errors.push({ field: 'basePath', message: 'Caminho da loja: algo como /minhaloja (ou vazio se a loja fica na raiz).' });
     }
     const kind = existing?.kind ?? (r.kind === 'demo' ? 'demo' : 'ink');
-    const devHost = (str('devHost') || `${id}.localhost`).toLowerCase();
+    const devHost = (str('devHost') || `${id}.${this.testHostSuffix}`).toLowerCase();
     if (!DEV_HOST.test(devHost)) errors.push({ field: 'devHost', message: 'Endereço de teste: um host, por exemplo minhaloja.localhost.' });
     else {
       const other = this.byDevHost(devHost) ?? this.byDomain(devHost);

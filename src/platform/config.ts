@@ -21,6 +21,8 @@ export interface AppConfig {
   /** Endereço de teste das lojas: esquema e porta do Worker de teste (local: http + 8787). */
   testScheme: 'http' | 'https';
   testPort: number | null;
+  /** Sufixo do endereço de teste padrão de uma loja nova: <id>.<sufixo> (local: localhost). */
+  testHostSuffix: string;
   seedDemo: boolean;
   /** Leitura periódica das lojas (minutos; 0 = desligada). */
   syncEveryMin: number;
@@ -87,6 +89,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     publicOrigin: origin('PUBLIC_ORIGIN', `http://127.0.0.1:${publicPort}`),
     testScheme: env.TEST_STORE_SCHEME === 'https' || (mode === 'hosted' && env.TEST_STORE_SCHEME !== 'http') ? 'https' : 'http',
     testPort: env.TEST_STORE_PORT ? Number(env.TEST_STORE_PORT) : mode === 'hosted' ? null : workerPort,
+    testHostSuffix: (env.TEST_HOST_SUFFIX?.trim() || 'localhost').replace(/^\./, '').toLowerCase(),
     seedDemo: env.SEED_DEMO ? env.SEED_DEMO === '1' : mode === 'local',
     syncEveryMin: num('SYNC_EVERY_MIN', mode === 'hosted' ? 60 : 0),
     backupEveryHours: num('BACKUP_EVERY_HOURS', mode === 'hosted' ? 24 : 0),
@@ -95,6 +98,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     secretB64: mode === 'hosted' ? need('APP_SECRET') || null : env.APP_SECRET?.trim() || null,
   };
   if (mode === 'hosted') {
+    if (cfg.testHostSuffix === 'localhost') missing.push('TEST_HOST_SUFFIX (ex.: teste.seudominio.com.br, para o endereço de teste <loja>.teste.seudominio.com.br)');
     if (cfg.panelOrigin && cfg.panelOrigin === cfg.publicOrigin) missing.push('PANEL_ORIGIN e PUBLIC_ORIGIN precisam ser hosts diferentes');
     if (cfg.secretB64 && Buffer.from(cfg.secretB64, 'base64').length < 32) missing.push('APP_SECRET (32 bytes em base64: openssl rand -base64 32)');
   }

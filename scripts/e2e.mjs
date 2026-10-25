@@ -98,7 +98,7 @@ try {
   await panel.fill('#ns-name', 'Vista Entre Nós');
   await panel.fill('#ns-id', 'vista-entre-nos');
   await panel.fill('#ns-ownerName', 'Gabriel Tomazi');
-  await panel.fill('#ns-ownerEmail', 'loja@vistaentrenos.com.br');
+  await panel.fill('#ns-ownerEmail', 'dono@vista.e2e.invalid');
   await panel.fill('#ns-domain', 'www.vistaentrenos.com.br');
   await panel.fill('#ns-basePath', '/vistaentrenos');
   await panel.fill('#ns-devHost', 'vistaentrenos.localhost');
@@ -115,7 +115,7 @@ try {
   check('Terceira loja criada pelo painel (sem editar arquivos)', true);
 
   await panel.fill('#u-name', 'Lojista Vista');
-  await panel.fill('#u-email', 'lojista@vistaentrenos.com.br');
+  await panel.fill('#u-email', 'lojista@vista.e2e.invalid');
   await panel.click('button:has-text("Criar acesso e enviar convite")');
   await panel.waitForSelector('.invite-out input');
   const inviteUrl = await panel.inputValue('.invite-out input');
@@ -310,6 +310,32 @@ try {
   const proxyCheck = await panel.locator('.check-row:has-text("Teste local pelo proxy")').textContent();
   check('Instalação: teste local insere o carregador (e não conta como instalado)', /inserido/.test(proxyCheck ?? '') && /validação remota pendente|Instalado/.test((await panel.locator('.check-row:has-text("Rota no domínio real")').textContent()) ?? ''), proxyCheck?.replace(/\s+/g, ' ').slice(0, 120));
   await panel.screenshot({ path: `${SHOTS}/r2-painel-instalacao.png`, fullPage: true });
+
+  // ---------------------------------------------------------------- lista de campanhas (Aurora)
+  await panel.goto(PANEL + '#/lojas/demo-aurora');
+  await panel.waitForSelector('.nav-item');
+  await panel.click('nav.side button:has-text("Cupons em destaque")');
+  await panel.waitForSelector('[data-key="campaigns"] .item');
+  const camTitles = () => panel.$$eval('[data-key="campaigns"] .item-title', (e) => e.map((x) => x.textContent));
+  const camBefore = await camTitles();
+  await panel.locator('[data-key="campaigns"] .item').nth(1).locator('[data-act="up"]').click();
+  const camMoved = await camTitles();
+  await panel.click('nav.side button:has-text("Identidade")');
+  await panel.click('.preview-head button[data-device="mobile"]');
+  await panel.click('nav.side button:has-text("Cupons em destaque")');
+  const camKept = JSON.stringify(await camTitles()) === JSON.stringify(camMoved) && camMoved[0] === camBefore[1];
+  const firstCam = panel.locator('[data-key="campaigns"] .item').first();
+  await firstCam.locator('.item-toggle').click();
+  const camCode = firstCam.getByLabel('Código do cupom');
+  const camOriginal = await camCode.inputValue();
+  await camCode.fill('');
+  await firstCam.locator('.item-toggle').click();
+  await panel.click('.head-actions button:has-text("Salvar rascunho")');
+  await panel.waitForTimeout(500);
+  const camFocus = await panel.evaluate(() => { const a = document.activeElement; return !!a?.closest('.item.open') && /Código do cupom/.test(a?.closest('.field')?.querySelector('label')?.textContent ?? ''); });
+  check('Campanhas: lista resumida reordena, mantém valores ao trocar de seção/prévia e o erro abre o item com foco no campo', camKept && camFocus, JSON.stringify(camMoved));
+  await camCode.fill(camOriginal);
+  await panel.locator('[data-key="campaigns"] .item').nth(1).locator('[data-act="up"]').click();
 
   // ---------------------------------------------------------------- vídeo enviado pelo painel (M08)
   await panel.goto(PANEL + '#/lojas/demo-trilha');
