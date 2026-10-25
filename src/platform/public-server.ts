@@ -21,8 +21,12 @@ export interface PublicDeps {
 }
 
 export function createPublicServer(deps: PublicDeps): Server {
+  return createServer(createPublicHandler(deps));
+}
+
+export function createPublicHandler(deps: PublicDeps): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const { stores } = deps;
-  return createServer(async (req, res) => {
+  return async (req, res) => {
     try {
       await handle(req, res);
     } catch (err) {
@@ -32,7 +36,7 @@ export function createPublicServer(deps: PublicDeps): Server {
         if (!res.headersSent) sendJson(res, 500, { error: 'internal' });
       }
     }
-  });
+  };
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://local');

@@ -1,10 +1,8 @@
-// Arquivos de vídeo e capa enviados pelo painel. Local: DATA_DIR/media/<loja>/<id>.
-// Em produção: armazenamento de objetos (ex.: R2) servido pelo Worker.
-import { createReadStream } from 'node:fs';
-import { mkdir, stat, writeFile, rename } from 'node:fs/promises';
-import { join } from 'node:path';
+// Arquivos de vídeo e capa enviados pelo painel. O registro fica no banco; o conteúdo, no
+// armazenamento configurado (local em DATA_DIR/media ou R2). Servidos pelo Worker em /__pink/media.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Db } from './db.ts';
+import type { BlobStore } from './blobs.ts';
 
 export const MEDIA_TYPES: Record<string, 'video' | 'image'> = {
   'video/mp4': 'video',
@@ -18,23 +16,20 @@ export const MEDIA_ID = /^[a-f0-9]{24}$/;
 
 export class MediaStore {
   private db: Db;
-  private dir: string;
-  constructor(db: Db, dataDir: string) {
+  private blobs: BlobStore;
+  constructor(db: Db, blobs: BlobStore) {
     this.db = db;
-    this.dir = join(dataDir, 'media');
+    this.blobs = blobs;
   }
 
-  private file(storeId: string, id: string): string {
-    return join(this.dir, storeId, id);
+  get backend(): BlobStore['kind'] {
+    return this.blobs.kind;
   }
 
   async save(storeId: string, id: string, mime: string, body: Buffer, originalName: string): Promise<{ id: string; url: string; kind: string }> {
     const kind = MEDIA_TYPES[mime];
     if (!kind) throw new Error('tipo não aceito');
-    await mkdir(join(this.dir, storeId), { recursive: true });
-    const tmp = `${this.file(storeId, id)}.tmp`;
-    await writeFile(tmp, body);
-    await rename(tmp, this.file(storeId, id));
+    await this.blobs.put(`${storeId}/${id}`, body, mime);
     this.db
       .prepare('INSERT INTO media (id, store_id, kind, mime, size, original_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, storeId, kind, mime, body.length, originalName.slice(0, 120), new Date().toISOString());
@@ -52,38 +47,28 @@ export class MediaStore {
     }));
   }
 
-  /** Serve com suporte a Range (o Safari exige para MP4). */
+  /** Serve com suporte a Range (o Safari exige para MP4). Só arquivos da própria loja. */
   async serve(storeId: string, id: string, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     if (!MEDIA_ID.test(id)) return false;
     const row = this.db.prepare('SELECT mime FROM media WHERE id = ? AND store_id = ?').get(id, storeId) as { mime: string } | undefined;
     if (!row) return false;
-    const path = this.file(storeId, id);
-    const { size } = await stat(path);
-    const headers: Record<string, string> = {
+    const head = req.method === 'HEAD';
+    const got = await this.blobs.get(`${storeId}/${id}`, typeof req.headers.range === 'string' ? req.headers.range : undefined, head);
+    if (!got) return false;
+    if (got.status === 416) {
+      res.writeHead(416, got.headers);
+      res.end();
+      return true;
+    }
+    res.writeHead(got.status, {
       'content-type': row.mime,
       'accept-ranges': 'bytes',
       'cache-control': 'public, max-age=86400',
       'x-content-type-options': 'nosniff',
-    };
-    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
-    if (range && (range[1] || range[2])) {
-      let start = range[1] ? Number(range[1]) : size - Number(range[2]);
-      let end = range[1] && range[2] ? Number(range[2]) : size - 1;
-      start = Math.max(0, start);
-      end = Math.min(size - 1, end);
-      if (start > end) {
-        res.writeHead(416, { 'content-range': `bytes */${size}` });
-        res.end();
-        return true;
-      }
-      res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': String(end - start + 1) });
-      if (req.method === 'HEAD') res.end();
-      else createReadStream(path, { start, end }).pipe(res);
-      return true;
-    }
-    res.writeHead(200, { ...headers, 'content-length': String(size) });
-    if (req.method === 'HEAD') res.end();
-    else createReadStream(path).pipe(res);
+      ...got.headers,
+    });
+    if (got.body) got.body.pipe(res);
+    else res.end();
     return true;
   }
 }

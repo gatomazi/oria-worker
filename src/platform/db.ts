@@ -124,6 +124,10 @@ const MIGRATIONS: string[] = [
   ALTER TABLE ink_api ADD COLUMN api_data TEXT;
   ALTER TABLE ink_api ADD COLUMN api_at TEXT;
   `,
+  // Links de uso único: convite (7 dias) e redefinição de senha (1 hora).
+  `
+  ALTER TABLE invites ADD COLUMN kind TEXT NOT NULL DEFAULT 'invite';
+  `,
 ];
 
 export type Db = DatabaseSync;

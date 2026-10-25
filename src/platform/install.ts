@@ -11,6 +11,10 @@ import type { Auth } from './auth.ts';
 export interface InstallContext {
   workerPort: number;
   publicPort: number;
+  /** Origem do serviço público (CONFIG_SERVICE_URL do Worker) e do painel (ADMIN_ORIGIN). */
+  publicOrigin?: string;
+  panelOrigin?: string;
+  hosted?: boolean;
   stores: StoreService;
   auth: Auth;
   /** Para testes: busca HTTP injetável. */

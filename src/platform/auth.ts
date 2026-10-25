@@ -15,6 +15,7 @@ export interface User {
 export const SESSION_COOKIE = 'pink_session';
 const SESSION_TTL_MS = 12 * 3600_000;
 const INVITE_TTL_MS = 7 * 24 * 3600_000;
+const RESET_TTL_MS = 3600_000;
 const EMAIL = /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,}$/i;
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -90,30 +91,51 @@ export class Auth {
     this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
   }
 
-  /** Convite de uso único para definir senha. Devolve o token em claro uma única vez. */
-  createInvite(userId: number, now = Date.now()): string {
+  /** Link de uso único (convite ou redefinição). Devolve o token em claro uma única vez; um novo invalida o anterior do mesmo tipo. */
+  private createLink(userId: number, kind: 'invite' | 'reset', ttl: number, now: number): string {
     const t = token();
-    this.db.prepare('DELETE FROM invites WHERE user_id = ? AND used_at IS NULL').run(userId);
-    this.db.prepare('INSERT INTO invites (token_hash, user_id, expires_at) VALUES (?, ?, ?)').run(sha256(t), userId, now + INVITE_TTL_MS);
+    this.db.prepare('DELETE FROM invites WHERE user_id = ? AND kind = ? AND used_at IS NULL').run(userId, kind);
+    this.db.prepare('INSERT INTO invites (token_hash, user_id, expires_at, kind) VALUES (?, ?, ?, ?)').run(sha256(t), userId, now + ttl, kind);
     return t;
   }
 
-  inviteUser(t: unknown, now = Date.now()): User | null {
+  private linkUser(t: unknown, kind: 'invite' | 'reset', now: number): User | null {
     if (typeof t !== 'string' || t.length > 100) return null;
-    const r = this.db.prepare('SELECT user_id, expires_at, used_at FROM invites WHERE token_hash = ?').get(sha256(t)) as
+    const r = this.db.prepare('SELECT user_id, expires_at, used_at FROM invites WHERE token_hash = ? AND kind = ?').get(sha256(t), kind) as
       | { user_id: number; expires_at: number; used_at: string | null }
       | undefined;
     if (!r || r.used_at || r.expires_at < now) return null;
     return this.userById(r.user_id);
   }
 
-  acceptInvite(t: string, password: string, now = Date.now()): User | null {
-    const user = this.inviteUser(t, now);
+  /** Define a senha pelo link e o consome; derruba as sessões abertas do acesso. */
+  private useLink(t: string, kind: 'invite' | 'reset', password: string, now: number): User | null {
+    const user = this.linkUser(t, kind, now);
     if (!user) return null;
     this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), user.id);
     this.db.prepare('UPDATE invites SET used_at = ? WHERE token_hash = ?').run(new Date(now).toISOString(), sha256(t));
     this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
     return user;
+  }
+
+  createInvite(userId: number, now = Date.now()): string {
+    return this.createLink(userId, 'invite', INVITE_TTL_MS, now);
+  }
+  inviteUser(t: unknown, now = Date.now()): User | null {
+    return this.linkUser(t, 'invite', now);
+  }
+  acceptInvite(t: string, password: string, now = Date.now()): User | null {
+    return this.useLink(t, 'invite', password, now);
+  }
+
+  createReset(userId: number, now = Date.now()): string {
+    return this.createLink(userId, 'reset', RESET_TTL_MS, now);
+  }
+  resetUser(t: unknown, now = Date.now()): User | null {
+    return this.linkUser(t, 'reset', now);
+  }
+  applyReset(t: string, password: string, now = Date.now()): User | null {
+    return this.useLink(t, 'reset', password, now);
   }
 
   login(email: unknown, password: unknown): User | null {

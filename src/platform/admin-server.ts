@@ -1,4 +1,4 @@
-// Painel e API administrativa. Escuta só em 127.0.0.1 nesta fase.
+// Painel e API administrativa. Local: 127.0.0.1. Hospedado: atrás de TLS, no host de PANEL_ORIGIN.
 // Operador: todas as lojas, pacotes, integração e acessos.
 // Lojista: somente a própria loja (rascunho, prévia, publicação, mídia).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -14,6 +14,7 @@ import type { CatalogReader } from './catalog.ts';
 import { previewToken } from './tokens.ts';
 import { installArtifacts, installStatus, type InstallContext } from './install.ts';
 import type { IntegrationService } from './integration.ts';
+import { inviteMail, resetMail, type Mailer } from './mailer.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -23,8 +24,10 @@ export interface AdminDeps {
   media: MediaStore;
   catalog: CatalogReader;
   secret: Buffer;
-  port: number;
-  /** Endereço local da loja via Worker (ex.: http://loja.localhost:8787). */
+  /** Origem do painel (ex.: https://painel.oria.app). Única aceita em escritas; base dos links enviados. */
+  panelOrigin: string;
+  mailer: Mailer;
+  /** Endereço de teste da loja via Worker (local: http://loja.localhost:8787). */
   storeUrl: (s: Store) => string;
   install: InstallContext;
   integration: IntegrationService;
@@ -64,11 +67,32 @@ const STATIC: Record<string, [string, string]> = {
 };
 
 export function createAdminServer(deps: AdminDeps): Server {
-  const { auth, stores } = deps;
-  const allowedHosts = new Set([`127.0.0.1:${deps.port}`, `localhost:${deps.port}`]);
-  const allowedOrigins = new Set([...allowedHosts].map((h) => `http://${h}`));
+  return createServer(createAdminHandler(deps));
+}
 
-  return createServer(async (req, res) => {
+/** Pedidos de "esqueci a senha" por e-mail e por IP: no máximo 3 a cada 15 minutos. */
+const FORGOT_WINDOW_MS = 15 * 60_000;
+
+export function createAdminHandler(deps: AdminDeps): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  const { auth, stores } = deps;
+  const panel = new URL(deps.panelOrigin);
+  const secure = panel.protocol === 'https:';
+  // Local, 127.0.0.1 e localhost na mesma porta são o mesmo painel.
+  const alias = panel.hostname === '127.0.0.1' ? [`localhost${panel.port ? `:${panel.port}` : ''}`] : [];
+  const allowedHosts = new Set([panel.host, ...alias]);
+  const allowedOrigins = new Set([panel.origin, ...alias.map((a) => `${panel.protocol}//${a}`)]);
+  const cookieAttrs = `HttpOnly; SameSite=Strict; Path=/${secure ? '; Secure' : ''}`;
+  const link = (kind: 'convite' | 'senha', token: string) => `${panel.origin}/#/${kind}/${token}`;
+  const forgotHits = new Map<string, number[]>();
+  const limited = (key: string, now = Date.now()) => {
+    const hits = (forgotHits.get(key) ?? []).filter((t) => now - t < FORGOT_WINDOW_MS);
+    hits.push(now);
+    forgotHits.set(key, hits);
+    if (forgotHits.size > 5000) forgotHits.clear();
+    return hits.length > 3;
+  };
+
+  return async (req, res) => {
     try {
       await handle(req, res);
     } catch (err) {
@@ -76,10 +100,24 @@ export function createAdminServer(deps: AdminDeps): Server {
       else if (err instanceof BodyError) sendJson(res, err.status, { error: 'bad_request', message: err.message });
       else {
         console.error('[painel] erro inesperado', err);
-        if (!res.headersSent) sendJson(res, 500, { error: 'internal', message: 'Erro inesperado no servidor local. Veja o terminal.' });
+        if (!res.headersSent) sendJson(res, 500, { error: 'internal', message: 'Erro inesperado no servidor. Tente de novo; se continuar, avise o suporte.' });
       }
     }
-  });
+  };
+
+  /** Envia o convite por e-mail. Falha de envio não perde o convite: o operador recebe o link. */
+  async function sendInvite(user: User, token: string): Promise<{ inviteUrl: string; sent: boolean; delivery: Mailer['delivery'] }> {
+    const url = link('convite', token);
+    const store = user.storeId ? stores.get(user.storeId) : null;
+    let sent = false;
+    try {
+      await deps.mailer.send(inviteMail(user.email, user.name, store?.name ?? null, url));
+      sent = deps.mailer.delivery === 'email';
+    } catch (err) {
+      console.error('[painel] convite não enviado', (err as Error).message);
+    }
+    return { inviteUrl: url, sent, delivery: deps.mailer.delivery };
+  }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // Host desconhecido (DNS rebinding) e escrita de outra origem (CSRF) são recusados antes de tudo.
@@ -90,6 +128,7 @@ export function createAdminServer(deps: AdminDeps): Server {
     const unsafe = method !== 'GET' && method !== 'HEAD';
     if (unsafe && !allowedOrigins.has(req.headers.origin ?? '')) return sendJson(res, 403, { error: 'forbidden_origin', message: 'Origem não permitida.' });
 
+    if (method === 'GET' && path === '/health') return sendJson(res, 200, { ok: true });
     if (method === 'GET' && (path === '/' || path === '/index.html')) {
       const html = await asset('src/panel/panel.html');
       return html
@@ -127,6 +166,43 @@ export function createAdminServer(deps: AdminDeps): Server {
       }
     }
 
+    // Esqueci a senha: mesma resposta exista ou não o acesso (não revela contas).
+    if (method === 'POST' && path === '/api/password/forgot') {
+      const body = (await readJson(req)) as { email?: unknown };
+      const answer = { ok: true, message: 'Se houver um acesso com este e-mail, enviamos um link para criar uma nova senha. Ele vale por 1 hora.' };
+      const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0]!.trim();
+      if (!isEmail(body.email)) return sendJson(res, 422, { error: 'invalid', message: 'Informe um e-mail válido.' });
+      const email = body.email.trim().toLowerCase();
+      if (limited(`e:${email}`) || limited(`i:${ip}`)) return sendJson(res, 200, answer);
+      const target = auth.userByEmail(email);
+      if (target) {
+        const t = auth.createReset(target.id);
+        try {
+          await deps.mailer.send(resetMail(target.email, target.name, link('senha', t)));
+        } catch (err) {
+          console.error('[painel] redefinição não enviada', (err as Error).message);
+        }
+        stores.audit(target.id, target.storeId, 'password.reset.request');
+      }
+      return sendJson(res, 200, answer);
+    }
+    const reset = /^\/api\/password\/reset\/([A-Za-z0-9_-]{20,100})$/.exec(path);
+    if (reset) {
+      const t = reset[1]!;
+      const target = auth.resetUser(t);
+      if (!target) return sendJson(res, 404, { error: 'invalid_reset', message: 'Este link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".' });
+      if (method === 'GET') return sendJson(res, 200, { name: target.name, email: target.email });
+      if (method === 'POST') {
+        const body = (await readJson(req)) as { password?: unknown };
+        const problem = passwordProblem(body.password);
+        if (problem) return sendJson(res, 422, { error: 'weak_password', message: problem });
+        const done = auth.applyReset(t, body.password as string);
+        if (!done) return sendJson(res, 404, { error: 'invalid_reset', message: 'Este link expirou ou já foi usado.' });
+        stores.audit(done.id, done.storeId, 'password.reset');
+        return startSession(res, done);
+      }
+    }
+
     // ---------------------------------------------------- com sessão
     const token = cookies(req)[SESSION_COOKIE];
     const session = auth.session(token);
@@ -137,7 +213,7 @@ export function createAdminServer(deps: AdminDeps): Server {
     if (path === '/api/session' && method === 'GET') return sendJson(res, 200, { user, csrf: session.csrf });
     if (path === '/api/logout' && method === 'POST') {
       auth.logout(token);
-      return sendJson(res, 200, { ok: true }, { 'set-cookie': `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0` });
+      return sendJson(res, 200, { ok: true }, { 'set-cookie': `${SESSION_COOKIE}=; ${cookieAttrs}; Max-Age=0` });
     }
     if (path === '/api/meta' && method === 'GET') {
       return sendJson(res, 200, {
@@ -259,7 +335,7 @@ export function createAdminServer(deps: AdminDeps): Server {
       const merchant = auth.createUser({ email: body.email, name, role: 'merchant', storeId: store.id });
       const inviteToken = auth.createInvite(merchant.id);
       stores.audit(user.id, store.id, 'user.invite', merchant.email);
-      return sendJson(res, 201, { user: merchant, inviteUrl: `http://127.0.0.1:${deps.port}/#/convite/${inviteToken}` });
+      return sendJson(res, 201, { user: merchant, ...(await sendInvite(merchant, inviteToken)) });
     }
     const userAction = /^\/users\/(\d+)(\/invite)?$/.exec(action);
     if (userAction) {
@@ -268,7 +344,8 @@ export function createAdminServer(deps: AdminDeps): Server {
       if (!target || target.storeId !== store.id) return sendJson(res, 404, { error: 'not_found', message: 'Acesso não encontrado.' });
       if (userAction[2] && method === 'POST') {
         const inviteToken = auth.createInvite(target.id);
-        return sendJson(res, 200, { inviteUrl: `http://127.0.0.1:${deps.port}/#/convite/${inviteToken}` });
+        stores.audit(user.id, store.id, 'user.invite.resend', target.email);
+        return sendJson(res, 200, await sendInvite(target, inviteToken));
       }
       if (!userAction[2] && method === 'DELETE') {
         auth.disableUser(target.id);
@@ -297,7 +374,7 @@ export function createAdminServer(deps: AdminDeps): Server {
   function startSession(res: ServerResponse, user: User): void {
     const s = auth.createSession(user.id);
     sendJson(res, 200, { user, csrf: s.csrf }, {
-      'set-cookie': `${SESSION_COOKIE}=${s.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor((s.expiresAt - Date.now()) / 1000)}`,
+      'set-cookie': `${SESSION_COOKIE}=${s.token}; ${cookieAttrs}; Max-Age=${Math.floor((s.expiresAt - Date.now()) / 1000)}`,
     });
   }
 

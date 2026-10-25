@@ -267,3 +267,6 @@ details.card > summary { cursor: pointer; font-weight: 600; }
 .int-promo { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
 .int-promo:first-child { border-top: 0; }
 .error-text { color: var(--error); }
+
+.auth-foot { margin: 4px 0 0; font-size: 14px; text-align: center; }
+.ok-text { color: var(--on); font-weight: 600; margin: 0; }

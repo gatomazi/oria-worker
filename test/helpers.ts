@@ -7,6 +7,8 @@ import { Auth } from '../src/platform/auth.ts';
 import { openDb, type Db } from '../src/platform/db.ts';
 import { StoreService } from '../src/platform/stores.ts';
 import { MediaStore } from '../src/platform/media.ts';
+import { LocalBlobStore } from '../src/platform/blobs.ts';
+import { OutboxMailer } from '../src/platform/mailer.ts';
 import { CatalogReader } from '../src/platform/catalog.ts';
 import { AssistantService } from '../src/platform/assistant.ts';
 import { IntegrationService } from '../src/platform/integration.ts';
@@ -23,6 +25,7 @@ export interface Stack {
   catalog: CatalogReader;
   assistant: AssistantService;
   integration: IntegrationService;
+  mailer: OutboxMailer;
   secret: Buffer;
   close(): void;
 }
@@ -34,7 +37,7 @@ export function stack(opts: { fetchImpl?: typeof fetch; apiFetch?: typeof fetch;
   const auth = new Auth(db);
   const stores = new StoreService(db, opts.now);
   if (opts.seedDemo !== false) seed(stores);
-  const media = new MediaStore(db, dir);
+  const media = new MediaStore(db, new LocalBlobStore(dir));
   const catalog = new CatalogReader(opts.fetchImpl);
   const integration = new IntegrationService({ db, catalog, secret, fetchImpl: opts.apiFetch });
   const assistant = new AssistantService({ stores, catalog, db, secret, integration });
@@ -47,6 +50,7 @@ export function stack(opts: { fetchImpl?: typeof fetch; apiFetch?: typeof fetch;
     catalog,
     assistant,
     integration,
+    mailer: new OutboxMailer(null),
     secret,
     close() {
       db.close();

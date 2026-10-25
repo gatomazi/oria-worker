@@ -119,6 +119,9 @@ async function route(): Promise<void> {
   document.getElementById('flash')!.hidden = true;
   const invite = /^#\/convite\/([A-Za-z0-9_-]+)$/.exec(hash);
   if (invite) return viewInvite(invite[1]!);
+  const reset = /^#\/senha\/([A-Za-z0-9_-]+)$/.exec(hash);
+  if (reset) return viewInvite(reset[1]!, 'reset');
+  if (hash === '#/esqueci') return viewForgot();
   if (!user) {
     try {
       const s = await api<{ user: User; csrf: string }>('/api/session');
@@ -180,6 +183,7 @@ function viewLogin(): void {
     h('div', { class: 'field' }, h('label', { for: 'login-pass' }, 'Senha'), pass),
     err,
     btn,
+    h('p', { class: 'auth-foot' }, h('a', { href: '#/esqueci' }, 'Esqueci minha senha')),
   );
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -200,13 +204,54 @@ function viewLogin(): void {
   email.focus();
 }
 
-async function viewInvite(token: string): Promise<void> {
+/** Esqueci a senha: sempre a mesma confirmação, exista ou não o acesso. */
+function viewForgot(): void {
   renderUser();
-  let info: { name: string; email: string; role: string };
+  const email = h('input', { id: 'forgot-email', type: 'email', autocomplete: 'username', required: true });
+  const btn = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Enviar link');
+  const out = h('p', { role: 'status', 'aria-live': 'polite' });
+  const form = h(
+    'form',
+    { class: 'card auth' },
+    h('div', { class: 'auth-head' }, h('p', { class: 'auth-brand' }, 'Oria'), h('h1', {}, 'Esqueci minha senha'), h('p', { class: 'help' }, 'Informe o e-mail do seu acesso. Enviamos um link para criar uma nova senha.')),
+    h('div', { class: 'field' }, h('label', { for: 'forgot-email' }, 'E-mail'), email),
+    out,
+    btn,
+    h('p', { class: 'auth-foot' }, h('a', { href: '#/' }, 'Voltar para entrar')),
+  );
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await busy(btn, 'Enviando…', async () => {
+      try {
+        const r = await api<{ message: string }>('/api/password/forgot', { method: 'POST', json: { email: email.value } });
+        out.className = 'ok-text';
+        out.textContent = r.message;
+      } catch (err) {
+        out.className = 'err';
+        out.textContent = errorText(err);
+      }
+    });
+  });
+  app.replaceChildren(form);
+  email.focus();
+}
+
+async function viewInvite(token: string, kind: 'invite' | 'reset' = 'invite'): Promise<void> {
+  renderUser();
+  const base = kind === 'reset' ? '/api/password/reset' : '/api/invites';
+  let info: { name: string; email: string; role?: string };
   try {
-    info = await api(`/api/invites/${token}`);
+    info = await api(`${base}/${token}`);
   } catch (err) {
-    app.replaceChildren(h('div', { class: 'card auth' }, h('h1', {}, 'Convite indisponível'), h('p', {}, errorText(err))));
+    app.replaceChildren(
+      h(
+        'div',
+        { class: 'card auth' },
+        h('h1', {}, kind === 'reset' ? 'Link expirado' : 'Convite indisponível'),
+        h('p', {}, errorText(err)),
+        kind === 'reset' ? h('p', {}, h('a', { href: '#/esqueci' }, 'Pedir um novo link')) : h('p', { class: 'help' }, 'Peça um novo convite a quem cadastrou seu acesso.'),
+      ),
+    );
     return;
   }
   const pass = h('input', { id: 'inv-pass', type: 'password', autocomplete: 'new-password', minlength: '10', required: true });
@@ -225,7 +270,7 @@ async function viewInvite(token: string): Promise<void> {
     e.preventDefault();
     await busy(btn, 'Salvando…', async () => {
       try {
-        const s = await api<{ user: User; csrf: string }>(`/api/invites/${token}`, { method: 'POST', json: { password: pass.value } });
+        const s = await api<{ user: User; csrf: string }>(`${base}/${token}`, { method: 'POST', json: { password: pass.value } });
         user = s.user;
         setCsrf(s.csrf);
         location.hash = s.user.role === 'merchant' ? `#/lojas/${s.user.storeId}` : '#/lojas';
@@ -445,7 +490,9 @@ async function viewOperation(id: string): Promise<void> {
 
   // Acessos
   const inviteOut = h('div', { class: 'invite-out', 'aria-live': 'polite' });
-  const showInvite = (url: string) => {
+  type InviteResult = { inviteUrl: string; sent: boolean; delivery: 'outbox' | 'email' };
+  const showInvite = (r: InviteResult, email: string) => {
+    const url = r.inviteUrl;
     const field = h('input', { type: 'text', readonly: true, class: 'mono', 'aria-label': 'Link de convite' });
     field.value = url;
     const copy = h('button', { type: 'button', class: 'btn btn-small' }, 'Copiar link');
@@ -454,14 +501,18 @@ async function viewOperation(id: string): Promise<void> {
       await navigator.clipboard?.writeText(url).catch(() => undefined);
       copy.textContent = 'Copiado';
     });
-    inviteOut.replaceChildren(h('p', {}, 'Envie este link ao lojista (vale 7 dias, uso único):'), h('div', { class: 'row' }, field, copy));
+    inviteOut.replaceChildren(
+      h('p', {}, r.sent ? `Convite enviado por e-mail para ${email}. Se preferir, copie o link (vale 7 dias, uso único):` : r.delivery === 'outbox' ? 'O envio de e-mail ainda não está configurado neste ambiente. Envie este link ao lojista (vale 7 dias, uso único):' : `Não foi possível enviar o e-mail para ${email}. Envie este link ao lojista (vale 7 dias, uso único):`),
+      h('div', { class: 'row' }, field, copy),
+    );
   };
   const userRows = users.users.map((u) => {
-    const resend = h('button', { type: 'button', class: 'btn btn-small btn-quiet' }, 'Novo convite');
+    const resend = h('button', { type: 'button', class: 'btn btn-small btn-quiet' }, u.hasPassword ? 'Enviar link de acesso' : 'Reenviar convite');
     const revoke = h('button', { type: 'button', class: 'btn btn-small btn-danger' }, 'Revogar');
     resend.addEventListener('click', async () => {
-      const r = await api<{ inviteUrl: string }>(`/api/stores/${id}/users/${u.id}/invite`, { method: 'POST', json: {} });
-      showInvite(r.inviteUrl);
+      const r = await api<InviteResult>(`/api/stores/${id}/users/${u.id}/invite`, { method: 'POST', json: {} });
+      showInvite(r, u.email);
+      flash(r.sent ? `Novo convite enviado para ${u.email}. O anterior deixou de valer.` : 'Novo convite gerado. O anterior deixou de valer.');
     });
     revoke.addEventListener('click', async () => {
       await api(`/api/stores/${id}/users/${u.id}`, { method: 'DELETE', json: {} });
@@ -472,15 +523,15 @@ async function viewOperation(id: string): Promise<void> {
   });
   const uName = h('input', { id: 'u-name', autocomplete: 'off' });
   const uEmail = h('input', { id: 'u-email', type: 'email', autocomplete: 'off' });
-  const uBtn = h('button', { type: 'submit', class: 'btn' }, 'Criar acesso e gerar convite');
+  const uBtn = h('button', { type: 'submit', class: 'btn' }, 'Criar acesso e enviar convite');
   const uForm = h('form', { class: 'two-actions' }, h('div', { class: 'field' }, h('label', { for: 'u-name' }, 'Nome'), uName), h('div', { class: 'field' }, h('label', { for: 'u-email' }, 'E-mail'), uEmail), uBtn);
   uForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     await busy(uBtn, 'Criando…', async () => {
       try {
-        const r = await api<{ inviteUrl: string }>(`/api/stores/${id}/users`, { method: 'POST', json: { name: uName.value, email: uEmail.value } });
-        showInvite(r.inviteUrl);
-        flash('Acesso criado. Envie o link ao lojista.');
+        const r = await api<InviteResult>(`/api/stores/${id}/users`, { method: 'POST', json: { name: uName.value, email: uEmail.value } });
+        showInvite(r, uEmail.value);
+        flash(r.sent ? 'Acesso criado e convite enviado por e-mail.' : 'Acesso criado. Envie o link ao lojista.');
       } catch (e2) {
         flash(errorText(e2), 'error');
       }
