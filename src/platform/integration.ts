@@ -14,12 +14,15 @@ import {
   parseFaq,
   parseProductCards,
   parseProductPromotions,
+  parseReviews,
   parseStoreSections,
+  parseTheme,
   progressiveTiers,
   type FaqItem,
   type NativeCoupon,
   type ProgressiveTier,
   type StoreContacts,
+  type StoreTheme,
 } from '../shared/ink-parse.ts';
 import { isStorePath } from '../shared/fields.ts';
 import { normalizePromotion, type InkPromotion } from '../shared/ink-promotions.ts';
@@ -43,6 +46,10 @@ export interface SiteData {
   sections: { label: string; path: string }[];
   coupons: SiteCoupon[];
   progressive: { code: string; measure: 'itens'; tiers: ProgressiveTier[] }[];
+  /** Cores e logo que a loja já usa (sugestão de identidade). */
+  theme: StoreTheme | null;
+  /** Avaliações publicadas na página de avaliações da loja (0 = nenhuma). */
+  reviews: number;
   pages: { label: string; path: string; ok: boolean; detail: string }[];
 }
 
@@ -207,6 +214,7 @@ export class IntegrationService {
       }
       for (const c of found) if (!coupons.some((x) => x.code.toUpperCase() === c.code.toUpperCase())) coupons.push({ ...c, seenOn: p.title });
     }
+    const reviewsDoc = await get('Avaliações', `${base}/reviews?sort=rate`);
     const progressive = coupons.flatMap((c) => {
       const p = progressiveTiers(c);
       return p ? [{ code: c.code, ...p }] : [];
@@ -219,6 +227,8 @@ export class IntegrationService {
       sections: home ? parseStoreSections(home, base) : [],
       coupons,
       progressive,
+      theme: home ? parseTheme(home) : null,
+      reviews: reviewsDoc ? parseReviews(reviewsDoc).reviews.length : 0,
       pages,
     };
     const now = new Date().toISOString();

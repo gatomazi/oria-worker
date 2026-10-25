@@ -142,16 +142,16 @@ if (process.argv.includes('--vista')) {
     ], limit: 8 });
     on(d, 'gallery', { size: 'media' });
     on(d, 'share', {});
-    on(d, 'coupons', { mode: 'unico', pages: ['home', 'listing', 'product'], campaigns: [
-      { title: 'Cupom de teste da homologação', description: 'Texto de teste: troque pelo cupom real cadastrado na INK.', code: 'TESTE10', conditions: 'Teste local: confirme que o código existe na INK antes de divulgar.', startsAt: null, endsAt: null, firstPurchase: false, nearPrice: false, badge: '' },
-    ] });
+    // Sem cupom: a Vista não tem cupons cadastrados na INK e nenhum é inventado (o M05 fica desligado).
     on(d, 'delivery', { productionMin: 3, productionMax: 7 });
     // Assistente básico: perguntas por estampa trazem peças e coleções da própria Vista.
+    // Respostas: o FAQ e a página de trocas que a própria Vista publicou (lidos pela Integração).
     on(d, 'assistant', {
-      name: 'Ajuda Entre Nós (teste)',
+      name: 'Ajuda Entre Nós',
       greeting: 'Oi! Procura uma estampa? Pergunte aqui.',
       suggestions: [{ text: 'Tem estampa de mãe?' }, { text: 'Como faço uma troca?' }],
-      knowledge: [{ topic: 'trocas', question: 'Como faço uma troca?', answer: 'Texto de teste: confira a política de trocas da loja antes de publicar.', keywords: 'troca, trocar, devolução' }],
+      knowledge: [],
+      storeData: true,
       productDiscovery: true,
     });
   });

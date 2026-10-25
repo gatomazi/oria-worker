@@ -14,6 +14,7 @@ import { openDb } from './db.ts';
 import { IntegrationService } from './integration.ts';
 import { createMailer } from './mailer.ts';
 import { MediaStore } from './media.ts';
+import { SetupService } from './setup.ts';
 import { createPublicHandler } from './public-server.ts';
 import { createReplayOrigin } from './replay-origin.ts';
 import { DEMO_ORIGIN_PORTS, seed } from './seed.ts';
@@ -53,6 +54,7 @@ const catalog = new CatalogReader();
 const integration = new IntegrationService({ db, catalog, secret });
 const assistant = new AssistantService({ stores, catalog, db, secret, integration });
 const mailer = createMailer(cfg);
+const setup = new SetupService({ db, stores, integration });
 const storeUrl = (s: { devHost: string; basePath: string }) => testStoreUrl(cfg, s);
 
 const admin = createAdminHandler({
@@ -66,6 +68,7 @@ const admin = createAdminHandler({
   storeUrl,
   install: { workerPort: cfg.workerPort, publicPort: cfg.publicPort, publicOrigin: cfg.publicOrigin, panelOrigin: cfg.panelOrigin, hosted: cfg.mode === 'hosted', stores, auth, integration },
   integration,
+  setup,
 });
 const pub = createPublicHandler({ stores, media, secret, assistant });
 

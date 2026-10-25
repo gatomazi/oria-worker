@@ -128,6 +128,23 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE invites ADD COLUMN kind TEXT NOT NULL DEFAULT 'invite';
   `,
+  // Configuração guiada: passo atual (retomável) e a origem de cada importação aplicada.
+  `
+  CREATE TABLE store_setup (
+    store_id TEXT PRIMARY KEY REFERENCES stores(id),
+    step INTEGER NOT NULL DEFAULT 1,
+    completed_at TEXT,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE store_imports (
+    store_id TEXT NOT NULL REFERENCES stores(id),
+    key TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    applied_at TEXT NOT NULL,
+    PRIMARY KEY (store_id, key)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

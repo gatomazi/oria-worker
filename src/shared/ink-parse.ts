@@ -408,3 +408,36 @@ export function progressiveTiers(c: Pick<NativeCoupon, 'rules'>): { measure: 'it
   tiers.sort((a, b) => a.threshold - b.threshold);
   return tiers.length ? { measure: 'itens', tiers: tiers.slice(0, 4) } : null;
 }
+
+// ------------------------------------------------------------------ identidade da loja
+
+export interface StoreTheme {
+  /** Cor da marca (fundo do cabeçalho e botões). */
+  primary: string | null;
+  /** Cor do texto sobre a cor da marca. */
+  onPrimary: string | null;
+  button: string | null;
+  buttonText: string | null;
+  /** Logo do cabeçalho (CDN da INK). */
+  logoUrl: string | null;
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Cores que a INK declara em :root (--color-primary, --color-font, --color-button…) e o logo do cabeçalho. */
+export function parseTheme(root: ParentNode): StoreTheme {
+  const css = [...root.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n');
+  const v = (name: string) => {
+    const m = new RegExp(`--${name}\\s*:\\s*(#[0-9a-fA-F]{6})\\b`).exec(css);
+    return m && HEX.test(m[1]!) ? m[1]!.toUpperCase() : null;
+  };
+  const logo = root.querySelector<HTMLImageElement>('header a.brand img, header .brand img');
+  const src = logo?.getAttribute('src') ?? '';
+  return {
+    primary: v('color-primary'),
+    onPrimary: v('color-font'),
+    button: v('color-button'),
+    buttonText: v('color-button-font'),
+    logoUrl: inkImage(src) || null,
+  };
+}

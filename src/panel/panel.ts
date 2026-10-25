@@ -36,6 +36,7 @@ interface Summary {
   published: { version: number; publishedAt: string; enabled: string[] } | null;
   draftPending: boolean;
   storeUrl: string;
+  setup?: { step: number; completedAt: string | null };
 }
 interface HistoryEntry {
   version: number;
@@ -139,11 +140,12 @@ async function route(): Promise<void> {
     location.hash = `#/lojas/${user.storeId}`;
     return;
   }
-  const m = /^#\/lojas\/([a-z0-9-]+)(\/operacao)?$/.exec(hash);
+  const m = /^#\/lojas\/([a-z0-9-]+)(\/operacao|\/configurar)?$/.exec(hash);
   try {
     if (hash === '#/' || hash === '#/lojas') return await viewStores();
     if (hash === '#/lojas/nova') return viewNewStore();
     if (hash === '#/pacotes') return await viewPackages();
+    if (m && m[2] === '/configurar') return await viewSetup(m[1]!);
     if (m && m[2]) return await viewOperation(m[1]!);
     if (m) return await viewEditor(m[1]!);
     app.replaceChildren(h('p', { class: 'empty' }, 'Página não encontrada.'));
@@ -296,8 +298,14 @@ async function viewStores(): Promise<void> {
       'li',
       { class: 'store-row' },
       h('div', {}, h('a', { href: `#/lojas/${s.id}`, class: 'store-name' }, s.name), h('p', { class: 'muted' }, `${s.domain} · ${s.kind === 'demo' ? 'demonstração' : 'loja INK'} · ${s.status === 'active' ? 'ativa' : s.status === 'paused' ? 'pausada' : 'em instalação'}`)),
-      h('div', { class: 'store-state' }, h('span', { class: `pill ${s.published ? 'on' : ''}` }, status), s.draftPending && s.published ? h('span', { class: 'pill warn' }, 'Rascunho com mudanças') : null),
-      h('div', { class: 'store-actions' }, h('a', { class: 'btn btn-small', href: `#/lojas/${s.id}` }, 'Editar'), h('a', { class: 'btn btn-small btn-quiet', href: `#/lojas/${s.id}/operacao` }, 'Operação')),
+      h(
+        'div',
+        { class: 'store-state' },
+        h('span', { class: `pill ${s.published ? 'on' : ''}` }, status),
+        s.draftPending && s.published ? h('span', { class: 'pill warn' }, 'Rascunho com mudanças') : null,
+        s.setup && !s.setup.completedAt ? h('span', { class: 'pill' }, `Configuração: passo ${s.setup.step} de 4`) : null,
+      ),
+      h('div', { class: 'store-actions' }, h('a', { class: 'btn btn-small', href: `#/lojas/${s.id}` }, 'Editar'), h('a', { class: 'btn btn-small btn-quiet', href: `#/lojas/${s.id}/configurar` }, s.setup?.completedAt ? 'Configuração' : 'Configurar'), h('a', { class: 'btn btn-small btn-quiet', href: `#/lojas/${s.id}/operacao` }, 'Operação')),
     );
   });
   app.replaceChildren(
@@ -602,8 +610,468 @@ async function viewPackages(): Promise<void> {
 
 type Section = { kind: 'module'; id: string } | { kind: 'identity' } | { kind: 'videos' } | { kind: 'history' } | { kind: 'integration' };
 
+// ------------------------------------------------------------------ configuração guiada
+
+interface SetupInfo {
+  progress: { step: number; completedAt: string | null };
+  features: FeatureInfo[];
+  presets: { id: string; title: string; result: string; modules: FeatureInfo[] }[];
+  offers: OfferInfo[];
+  identitySuggestion: Identity | null;
+}
+interface FeatureInfo {
+  id: string;
+  name: string;
+  entitled: boolean;
+  enabledInDraft: boolean;
+  liveNow: boolean;
+  ready: boolean;
+  missing: string;
+}
+interface OfferInfo {
+  key: string;
+  module: string | null;
+  title: string;
+  origin: string;
+  detail: string;
+  state: 'novo' | 'aplicado' | 'editado' | 'existente';
+  confirm?: string;
+}
+
+const STEPS = ['Ler a loja', 'Identidade e conteúdo', 'Recursos', 'Conferir e publicar'];
+
+/** Configuração inicial guiada: curta, retomável; tudo vai para o rascunho até publicar. */
+async function viewSetup(id: string): Promise<void> {
+  let view = await api<StoreView>(`/api/stores/${id}`);
+  let setup = await api<SetupInfo>(`/api/stores/${id}/setup`);
+  let integ = await api<IntegrationStatus>(`/api/stores/${id}/integration`);
+  let step = Math.min(Math.max(setup.progress.step, 1), 4);
+  const refresh = async () => {
+    [view, setup, integ] = await Promise.all([api<StoreView>(`/api/stores/${id}`), api<SetupInfo>(`/api/stores/${id}/setup`), api<IntegrationStatus>(`/api/stores/${id}/integration`)]);
+  };
+
+  const stepper = h('ol', { class: 'stepper', 'aria-label': 'Etapas' });
+  const body = h('div', { class: 'setup-body' });
+  const back = h('button', { type: 'button', class: 'btn' }, 'Voltar');
+  const next = h('button', { type: 'button', class: 'btn btn-primary' }, 'Continuar');
+  const foot = h('div', { class: 'setup-foot' }, back, next);
+  const done = setup.progress.completedAt;
+  app.replaceChildren(
+    h(
+      'div',
+      { class: 'setup' },
+      crumbs(...(isOperator() ? [['Lojas', '#/lojas'] as [string, string]] : []), [view.store.name, `#/lojas/${id}`], 'Configuração guiada'),
+      h('h1', {}, 'Configurar a loja'),
+      done
+        ? h('p', { class: 'setup-done' }, `Configuração concluída em ${when(done)}. Você pode revisar qualquer etapa; nada é desfeito ao voltar aqui. `, h('a', { href: `#/lojas/${id}` }, 'Ir para o editor'))
+        : h('p', { class: 'help' }, 'Quatro passos curtos. Tudo fica no rascunho até você publicar, e dá para sair e voltar depois.'),
+      stepper,
+      body,
+      foot,
+    ),
+  );
+
+  const go = async (n: number) => {
+    step = Math.min(Math.max(n, 1), 4);
+    await api(`/api/stores/${id}/setup`, { method: 'PUT', json: { step } }).catch(() => undefined);
+    render();
+    window.scrollTo({ top: 0 });
+  };
+  // Antes de sair de um passo com escolhas pendentes (ex.: recursos marcados), salva.
+  let beforeNext: (() => Promise<boolean>) | null = null;
+  back.addEventListener('click', () => void go(step - 1));
+  next.addEventListener('click', () =>
+    void busy(next, 'Salvando…', async () => {
+      if (beforeNext && !(await beforeNext())) return;
+      await go(step + 1);
+    }),
+  );
+
+  function render(): void {
+    stepper.replaceChildren(
+      ...STEPS.map((label, i) => {
+        const n = i + 1;
+        const b = h('button', { type: 'button', class: 'step', 'aria-current': n === step ? 'step' : undefined }, h('span', { class: 'step-n' }, String(n)), h('span', {}, label));
+        b.addEventListener('click', () => void go(n));
+        return h('li', { class: n < step ? 'past' : '' }, b);
+      }),
+    );
+    back.hidden = step === 1;
+    next.hidden = step === 4;
+    beforeNext = null;
+    body.replaceChildren();
+    if (step === 1) stepRead();
+    else if (step === 2) stepContent();
+    else if (step === 3) stepFeatures();
+    else stepReview();
+  }
+
+  // ---- 1. ler a loja
+  function stepRead(): void {
+    const d = integ.site.data;
+    const read = h('button', { type: 'button', class: `btn ${d ? '' : 'btn-primary'}` }, d ? 'Ler de novo' : 'Ler a loja agora');
+    read.addEventListener('click', () =>
+      void busy(read, 'Lendo a loja…', async () => {
+        try {
+          integ = await api<IntegrationStatus>(`/api/stores/${id}/integration/sync`, { method: 'POST', json: {} });
+          setup = await api<SetupInfo>(`/api/stores/${id}/setup`);
+          flash(integ.site.error ?? 'Loja lida.', integ.site.error ? 'error' : 'ok');
+          render();
+        } catch (err) {
+          flash(errorText(err), 'error');
+        }
+      }),
+    );
+    const found: [string, string, boolean][] = [];
+    const missing: string[] = [];
+    if (d) {
+      const t = d.theme;
+      found.push(['Logo', t?.logoUrl ? 'encontrado no cabeçalho' : 'não encontrado', !!t?.logoUrl]);
+      found.push(['Cores', t?.primary ? `cor da marca ${t.primary}` : 'não encontradas', !!t?.primary]);
+      found.push(['Navegação', d.sections.length ? `${d.sections.length} itens no menu` : 'menu não encontrado', d.sections.length > 0]);
+      found.push(['Perguntas frequentes', d.faq.length ? `${d.faq.length} perguntas e respostas` : 'nenhuma publicada', d.faq.length > 0]);
+      const c = d.contacts;
+      const contacts = [c.instagram && 'Instagram', c.whatsapp && 'WhatsApp', c.email && 'e-mail', c.tiktok && 'TikTok', c.facebook && 'Facebook'].filter(Boolean).join(', ');
+      found.push(['Contatos', contacts || 'nenhum nas páginas', !!contacts]);
+      found.push(['Cupons nos produtos', d.coupons.length ? d.coupons.map((x) => x.code).join(', ') : 'nenhum', d.coupons.length > 0]);
+      found.push(['Avaliações', d.reviews ? `${d.reviews} publicadas` : 'nenhuma publicada', d.reviews > 0]);
+      if (!d.coupons.length) missing.push('Cupons: cadastre no recurso Cupons as campanhas que já existem na INK (com o mesmo código).');
+      if (!d.faq.length) missing.push('Assistente: cadastre as respostas da loja (prazo, trocas, pagamento).');
+      if (!d.reviews) missing.push('Avaliações com fotos: aparecem quando a loja tiver avaliações publicadas na INK.');
+    }
+    const api_ = integ.api;
+    if (api_.configured) found.push(['API da INK', api_.testOk ? `conectada${api_.data ? `: ${api_.data.promotions.length} promoções, ${api_.data.collections.length} categorias, ${api_.data.products.total} produtos` : ''}` : 'token guardado, conexão a testar', !!api_.testOk]);
+    const failed = d?.pages.filter((p) => !p.ok) ?? [];
+    body.append(
+      h(
+        'section',
+        { class: 'card stack' },
+        h('div', { class: 'row-between' }, h('h2', {}, 'O que a loja já tem'), read),
+        h('p', { class: 'help' }, 'Lemos as páginas públicas da sua loja na INK (início, perguntas frequentes, trocas, sobre, avaliações e alguns produtos). Nada é alterado na INK.'),
+        d
+          ? h('ul', { class: 'found' }, ...found.map(([k, v, ok]) => h('li', { class: ok ? 'ok' : 'none' }, h('span', { class: 'found-mark', 'aria-hidden': 'true' }), h('strong', {}, k), h('span', {}, v))))
+          : h('p', { class: 'empty' }, integ.site.error ?? 'Ainda não lida.'),
+        integ.site.error && d ? h('p', { class: 'error-text' }, integ.site.error) : null,
+        missing.length ? h('div', { class: 'stack' }, h('h3', {}, 'Dá para preencher à mão'), h('ul', { class: 'int-list' }, ...missing.map((m) => h('li', {}, m)))) : null,
+        failed.length ? h('details', {}, h('summary', {}, `Páginas que não deu para ler (${failed.length})`), h('ul', { class: 'int-list' }, ...failed.map((p) => h('li', {}, `${p.label}: ${p.detail}`)))) : null,
+        !api_.configured ? h('p', { class: 'help' }, 'Plano da INK com API? Cole o token em Integração (no editor) para trazer promoções, categorias e produtos com mais precisão. É opcional.') : null,
+      ),
+    );
+  }
+
+  // ---- 2. identidade e conteúdo
+  function stepContent(): void {
+    const identity = buildForm(IDENTITY_FIELDS, view.draft.config.identity as unknown as Values, { identity: view.draft.config.identity, videos: [], suggestions: [], onChange: () => paintSample() });
+    const sample = h('div', { class: 'id-sample', 'aria-hidden': 'true' });
+    const paintSample = () => {
+      const i = identity.read() as unknown as Identity;
+      sample.replaceChildren(
+        h('span', { class: 'id-logo' }, i.logoUrl ? h('img', { src: i.logoUrl, alt: '' }) : 'Logo'),
+        h('span', { class: 'id-btn' }, 'Comprar'),
+        h('span', { class: 'id-card' }, h('strong', {}, 'Cupom'), ' 10% OFF'),
+      );
+      sample.style.setProperty('--p', i.primary);
+      sample.style.setProperty('--s', i.surface);
+      sample.style.setProperty('--t', i.text);
+      sample.style.setProperty('--a', i.accent);
+      sample.dataset.style = i.style;
+    };
+    paintSample();
+    const saveId = h('button', { type: 'button', class: 'btn btn-primary' }, 'Salvar identidade');
+    saveId.addEventListener('click', () =>
+      void busy(saveId, 'Salvando…', async () => {
+        try {
+          const cfg = structuredClone(view.draft.config);
+          cfg.identity = identity.read() as unknown as Identity;
+          view = await api<StoreView>(`/api/stores/${id}/draft`, { method: 'PUT', json: { config: cfg, expectedUpdatedAt: view.draft.updatedAt } });
+          flash('Identidade salva no rascunho.');
+        } catch (err) {
+          if (err instanceof ApiError) identity.showErrors(err.errors, 'identity');
+          flash(errorText(err), 'error');
+        }
+      }),
+    );
+    const sug = setup.identitySuggestion;
+    const useSug = sug ? h('button', { type: 'button', class: 'btn' }, 'Usar logo e cores da loja') : null;
+    useSug?.addEventListener('click', () => void applyOffers(['identidade'], [], [], useSug));
+
+    // Conteúdo importado
+    const rows = setup.offers
+      .filter((o) => o.key !== 'identidade')
+      .map((o) => {
+        const pick = h('input', { type: 'checkbox', value: o.key });
+        pick.checked = o.state === 'novo';
+        const replace = o.state === 'editado' || o.state === 'existente' ? h('input', { type: 'checkbox', value: o.key, 'data-kind': 'replace' }) : null;
+        const sure = o.confirm ? h('input', { type: 'checkbox', value: o.key, 'data-kind': 'confirm' }) : null;
+        const badge = { novo: ['Novo', ''], aplicado: ['No rascunho', 'on'], editado: ['Editado por você', 'warn'], existente: ['Já tem conteúdo', 'warn'] }[o.state];
+        return h(
+          'li',
+          { class: 'offer' },
+          h('label', { class: 'offer-main' }, pick, h('span', {}, h('strong', {}, o.title), ' ', h('span', { class: `pill ${badge[1]}` }, badge[0]), h('br'), h('span', { class: 'help' }, o.detail), h('br'), h('span', { class: 'origin' }, `Origem: ${o.origin}`))),
+          replace ? h('label', { class: 'check sub' }, replace, h('span', {}, o.state === 'editado' ? 'Substituir o que você editou pelo importado' : 'Substituir o conteúdo atual pelo importado')) : null,
+          sure ? h('label', { class: 'check sub' }, sure, h('span', {}, o.confirm!)) : null,
+        );
+      });
+    const offersList = h('ul', { class: 'offers' }, ...rows);
+    const apply = h('button', { type: 'button', class: 'btn btn-primary' }, 'Aplicar os selecionados');
+    apply.addEventListener('click', () => {
+      const val = (sel: string) => [...offersList.querySelectorAll<HTMLInputElement>(sel)].filter((i) => i.checked).map((i) => i.value);
+      void applyOffers(val('.offer-main input'), val('input[data-kind="replace"]'), val('input[data-kind="confirm"]'), apply);
+    });
+
+    body.append(
+      h(
+        'section',
+        { class: 'card stack' },
+        h('div', { class: 'row-between' }, h('h2', {}, 'Identidade'), useSug),
+        sug ? h('p', { class: 'help' }, `Sugestão a partir da sua loja: cor ${sug.primary}, fundo ${sug.surface}${sug.logoUrl ? ' e o logo do cabeçalho' : ''}. Revise e ajuste à vontade.`) : h('p', { class: 'help' }, 'Não deu para ler as cores da loja: escolha abaixo. Não precisa ser perfeito para continuar.'),
+        h('div', { class: 'id-grid' }, identity.el, sample),
+        h('div', { class: 'row' }, saveId),
+      ),
+      h(
+        'section',
+        { class: 'card stack' },
+        h('h2', {}, 'Conteúdo encontrado'),
+        h('p', { class: 'help' }, 'Escolha o que entra no rascunho. Cupons e metas mantêm as regras, o alcance e a validade da origem. O que você já editou não é trocado sem você pedir.'),
+        rows.length ? offersList : h('p', { class: 'empty' }, 'Nada para importar ainda. Leia a loja no passo 1 ou conecte a API.'),
+        rows.length ? h('div', { class: 'row' }, apply) : null,
+      ),
+    );
+  }
+
+  async function applyOffers(keys: string[], replace: string[], confirmed: string[], btn: HTMLButtonElement | null): Promise<void> {
+    if (!keys.length) {
+      flash('Nada selecionado.', 'info');
+      return;
+    }
+    await busy(btn, 'Aplicando…', async () => {
+      try {
+        const r = await api<StoreView & { report: { key: string; result: string }[] }>(`/api/stores/${id}/setup/imports`, { method: 'POST', json: { keys, replace, confirmed } });
+        await refresh();
+        const kept = r.report.filter((x) => x.result !== 'aplicado');
+        flash(kept.length ? `Aplicado no rascunho, exceto: ${kept.map((x) => `${setup.offers.find((o) => o.key === x.key)?.title ?? x.key} (${x.result})`).join('; ')}.` : 'Aplicado no rascunho.', kept.length ? 'info' : 'ok');
+        render();
+      } catch (err) {
+        flash(errorText(err), 'error');
+      }
+    });
+  }
+
+  // ---- 3. recursos
+  function stepFeatures(): void {
+    const boxes = new Map<string, HTMLInputElement>();
+    const cards = setup.presets
+      .filter((p) => p.modules.length)
+      .map((p) => {
+        const all = h('button', { type: 'button', class: 'btn btn-small' }, 'Escolher este conjunto');
+        const items = p.modules.map((f) => {
+          const c = h('input', { type: 'checkbox', value: f.id });
+          c.checked = f.enabledInDraft;
+          boxes.set(f.id, c);
+          return h(
+            'li',
+            { class: `feat ${f.ready ? '' : 'pending'}` },
+            h('label', { class: 'check' }, c, h('span', {}, h('strong', {}, f.name), f.liveNow ? h('span', { class: 'pill on' }, 'na loja') : '', h('br'), f.ready ? h('span', { class: 'help' }, 'Pronto para usar.') : h('span', { class: 'help warn-text' }, `Pendente: ${f.missing} Fica desligado até ter o conteúdo.`))),
+          );
+        });
+        all.addEventListener('click', () => p.modules.forEach((f) => (boxes.get(f.id)!.checked = f.ready || boxes.get(f.id)!.checked)));
+        return h('section', { class: 'card stack preset' }, h('div', { class: 'row-between' }, h('h2', {}, p.title), all), h('p', {}, p.result), h('ul', { class: 'feats' }, ...items));
+      });
+    const save = h('button', { type: 'button', class: 'btn btn-primary' }, 'Salvar a escolha no rascunho');
+    const initial = () => [...boxes.values()].map((b) => `${b.value}:${b.checked}`).join();
+    let saved = '';
+    const persist = async (): Promise<boolean> => {
+      try {
+        const enable = [...boxes.values()].filter((b) => b.checked).map((b) => b.value);
+        const r = await api<{ skipped: { id: string; missing: string }[] }>(`/api/stores/${id}/setup/features`, { method: 'POST', json: { enable } });
+        await refresh();
+        saved = initial();
+        flash(r.skipped.length ? `Escolha salva. Ficaram desligados até ter conteúdo: ${r.skipped.map((x) => setup.features.find((f) => f.id === x.id)?.name).join(', ')}.` : 'Escolha salva no rascunho.', r.skipped.length ? 'info' : 'ok');
+        return true;
+      } catch (err) {
+        flash(errorText(err), 'error');
+        return false;
+      }
+    };
+    save.addEventListener('click', () => void busy(save, 'Salvando…', async () => (await persist()) && render()));
+    beforeNext = async () => (initial() === saved ? true : persist());
+    saved = initial();
+    body.append(h('p', { class: 'help' }, 'Comece pelo que fizer sentido; o resto dá para ligar depois no editor. Os conjuntos só marcam recursos: não mudam o que está liberado para a loja.'), h('div', { class: 'presets' }, ...cards), h('div', { class: 'row' }, save));
+  }
+
+  // ---- 4. conferir e publicar
+  function stepReview(): void {
+    const draft = view.draft.config;
+    const preview = createPreview({ id, basePath: view.store.basePath, draft: () => view.draft.config, entitled: () => new Set(view.entitled) });
+    const on = setup.features.filter((f) => draft.modules[f.id]?.enabled && f.ready);
+    const onEmpty = setup.features.filter((f) => draft.modules[f.id]?.enabled && !f.ready);
+    const pending = setup.features.filter((f) => f.entitled && !draft.modules[f.id]?.enabled && !f.ready);
+    const errors = parseStoreConfig(draft).errors;
+    const pub = h('button', { type: 'button', class: 'btn btn-primary', disabled: !!errors.length || !on.length }, view.published && view.draftMatchesPublished ? 'Publicado' : 'Publicar na loja');
+    if (view.published && view.draftMatchesPublished) pub.disabled = true;
+    pub.addEventListener('click', () =>
+      void busy(pub, 'Publicando…', async () => {
+        try {
+          view = await api<StoreView>(`/api/stores/${id}/publish`, { method: 'POST', json: { expectedDraftUpdatedAt: view.draft.updatedAt } });
+          await api(`/api/stores/${id}/setup/complete`, { method: 'POST', json: {} });
+          await refresh();
+          flash(`Publicado: versão ${view.published!.version} na loja.`);
+          render();
+        } catch (err) {
+          flash(errorText(err), 'error');
+        }
+      }),
+    );
+    const finish = h('button', { type: 'button', class: 'btn btn-primary' }, 'Concluir configuração');
+    finish.addEventListener('click', () =>
+      void busy(finish, 'Concluindo…', async () => {
+        await api(`/api/stores/${id}/setup/complete`, { method: 'POST', json: {} });
+        await refresh();
+        flash('Configuração concluída. Ajustes finos continuam no editor.');
+        void viewSetup(id);
+      }),
+    );
+    const after = view.published
+      ? h(
+          'div',
+          { class: 'setup-after' },
+          !setup.progress.completedAt && view.draftMatchesPublished ? finish : null,
+          h('p', {}, h('strong', {}, `Na loja: versão ${view.published.version}`), ` (${when(view.published.publishedAt)}).`),
+          h('div', { class: 'row' }, h('a', { class: 'btn', href: view.storeUrl, target: '_blank', rel: 'noopener' }, 'Abrir a loja ↗'), h('a', { class: 'btn', href: `#/lojas/${id}` }, 'Ajustar recursos no editor')),
+        )
+      : null;
+    body.append(
+      h(
+        'div',
+        { class: 'review' },
+        h(
+          'section',
+          { class: 'card stack' },
+          h('h2', {}, 'O que vai para a loja'),
+          on.length ? h('ul', { class: 'int-list' }, ...on.map((f) => h('li', {}, f.name))) : h('p', { class: 'empty' }, 'Nenhum recurso escolhido ainda (passo 3).'),
+          onEmpty.length ? h('div', { class: 'warn-box' }, h('p', {}, h('strong', {}, 'Ligado, mas sem conteúdo:')), h('ul', { class: 'int-list' }, ...onEmpty.map((f) => h('li', {}, `${f.name}: ${f.missing}`))), h('p', { class: 'help' }, 'Na loja eles não mostram nada até ter o conteúdo. Desligue no passo 3 ou complete no editor.')) : null,
+          pending.length ? h('details', {}, h('summary', {}, `Pendentes, ficam de fora (${pending.length})`), h('ul', { class: 'int-list' }, ...pending.map((f) => h('li', {}, `${f.name}: ${f.missing}`)))) : null,
+          errors.length ? h('div', { class: 'error-summary' }, h('p', {}, 'Antes de publicar:'), h('ul', {}, ...errors.slice(0, 6).map((e) => h('li', {}, e.message)))) : null,
+          h('p', { class: 'help' }, view.published && view.draftMatchesPublished ? 'O rascunho é igual ao que está na loja.' : 'Publicar coloca o rascunho na loja; até lá, nada muda para os clientes.'),
+          h('div', { class: 'row' }, pub),
+          after,
+        ),
+        preview.pane,
+      ),
+    );
+    void preview.load();
+  }
+
+  render();
+}
+
+/**
+ * Prévia da loja com o RASCUNHO atual (inclusive alterações não salvas), num viewport de
+ * verdade: computador 1440×900, celular 390×844, reduzido para caber na coluna. A
+ * configuração vai por postMessage só para a origem da loja de teste; o token é de prévia.
+ */
+function createPreview(opts: { id: string; basePath: string; draft: () => StoreConfig; entitled: () => Set<string> }) {
+  const { id } = opts;
+  const frame = h('iframe', { title: 'Prévia na loja', class: 'preview-iframe' });
+  const previewNote = h('p', { class: 'help preview-note', 'aria-live': 'polite' });
+  const pages: Record<string, string> = { home: opts.basePath || '/', listing: `${opts.basePath}/products`, product: `${opts.basePath}/products` };
+  const pageSel = h('select', { 'aria-label': 'Página da prévia' }, h('option', { value: 'home' }, 'Início'), h('option', { value: 'listing' }, 'Listagem'), h('option', { value: 'product' }, 'Produto'));
+  const VIEWPORTS = { desktop: { w: 1440, h: 900 }, mobile: { w: 390, h: 844 } } as const;
+  let device: keyof typeof VIEWPORTS = 'desktop';
+  const devBtns = (['desktop', 'mobile'] as const).map((d) => h('button', { type: 'button', 'aria-pressed': d === device ? 'true' : 'false', 'data-device': d }, d === 'desktop' ? 'Computador' : 'Celular'));
+  const zoomBtn = h('button', { type: 'button', class: 'btn btn-small btn-quiet preview-zoom', 'aria-pressed': 'false' }, 'Ampliar');
+  const stage = h('div', { class: 'preview-stage' }, frame);
+  const frameBox = h('div', { class: 'preview-frame', 'data-device': device }, stage);
+  const pane = h(
+    'aside',
+    { class: 'preview' },
+    h('div', { class: 'preview-head' }, h('h2', {}, 'Prévia na loja'), pageSel, h('div', { class: 'seg', role: 'group', 'aria-label': 'Dispositivo' }, ...devBtns), zoomBtn),
+    previewNote,
+    frameBox,
+  );
+  const fit = () => {
+    const vp = VIEWPORTS[device];
+    const avail = frameBox.clientWidth - (device === 'mobile' ? 24 : 0);
+    const maxH = pane.classList.contains('zoomed') ? window.innerHeight - 140 : Infinity;
+    const scale = Math.max(0, Math.min(1, avail / vp.w, maxH / vp.h));
+    frame.style.width = `${vp.w}px`;
+    frame.style.height = `${vp.h}px`;
+    frame.style.transform = `scale(${scale})`;
+    stage.style.width = `${Math.round(vp.w * scale)}px`;
+    stage.style.height = `${Math.round(vp.h * scale)}px`;
+    frameBox.dataset.scale = String(Math.round(scale * 100));
+  };
+  new ResizeObserver(() => fit()).observe(frameBox);
+  let ready = false;
+  let origin = '';
+  const push = () => {
+    if (!ready || !frame.contentWindow) return;
+    const parsed = parseStoreConfig(opts.draft());
+    const cfg = toPublicConfig({ id, basePath: opts.basePath }, 0, new Date().toISOString(), parsed.value, opts.entitled());
+    frame.contentWindow.postMessage({ type: 'pink-preview-config', config: cfg }, origin);
+    const on = Object.keys(cfg.modules).length;
+    previewNote.textContent = on
+      ? `Prévia do rascunho atual (${on} recurso(s) ativo(s) no rascunho), sobre a página real da loja. Nada aqui está publicado.`
+      : 'Nenhum recurso ativo no rascunho: a loja aparece como está.';
+  };
+  const load = async () => {
+    ready = false;
+    try {
+      const t = await api<{ token: string; storeUrl: string }>(`/api/stores/${id}/preview-token`, { method: 'POST', json: {} });
+      const base = new URL(t.storeUrl);
+      origin = base.origin;
+      const u = new URL(pages[pageSel.value] ?? base.pathname, base.origin);
+      u.searchParams.set('__pink_preview', t.token);
+      frame.src = u.href;
+    } catch (err) {
+      previewNote.textContent = `Prévia indisponível: ${errorText(err)}`;
+    }
+  };
+  window.onmessage = (e: MessageEvent) => {
+    if (e.origin !== origin || (e.data as { type?: string })?.type !== 'pink-preview-ready') return;
+    ready = true;
+    push();
+  };
+  pageSel.addEventListener('change', () => void load());
+  const setDevice = (d: keyof typeof VIEWPORTS) => {
+    device = d;
+    devBtns.forEach((o) => o.setAttribute('aria-pressed', String(o.dataset.device === d)));
+    frameBox.dataset.device = d;
+    fit();
+  };
+  devBtns.forEach((b) => b.addEventListener('click', () => setDevice(b.dataset.device as keyof typeof VIEWPORTS)));
+  // Ampliar: a prévia ocupa a tela para inspeção (Esc ou o mesmo botão voltam).
+  const setZoom = (on: boolean) => {
+    pane.classList.toggle('zoomed', on);
+    zoomBtn.setAttribute('aria-pressed', String(on));
+    zoomBtn.textContent = on ? 'Fechar ampliação' : 'Ampliar';
+    document.body.classList.toggle('preview-zoomed', on);
+    fit();
+  };
+  zoomBtn.addEventListener('click', () => setZoom(!pane.classList.contains('zoomed')));
+  document.addEventListener('keydown', (e) => e.key === 'Escape' && pane.classList.contains('zoomed') && setZoom(false));
+  requestAnimationFrame(fit);
+  return { pane, pages, push, fit, load, setDevice, setPage: (pg: 'home' | 'listing' | 'product') => { pageSel.value = pg; void load(); } };
+}
+
 async function viewEditor(id: string): Promise<void> {
   let view = await api<StoreView>(`/api/stores/${id}`);
+  // Lojista chegando a uma loja ainda não configurada: começa pela configuração guiada (uma vez por sessão).
+  if (!isOperator() && !view.published) {
+    const key = `oria-setup-${id}`;
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem(key) === '1';
+      sessionStorage.setItem(key, '1');
+    } catch {
+      seen = false;
+    }
+    const st = await api<{ progress: { completedAt: string | null } }>(`/api/stores/${id}/setup`).catch(() => null);
+    if (!seen && st && !st.progress.completedAt) {
+      location.hash = `#/lojas/${id}/configurar`;
+      return;
+    }
+  }
   let draft: StoreConfig = structuredClone(view.draft.config);
   let section: Section = { kind: 'identity' };
   let form: FormHandle | null = null;
@@ -639,46 +1107,14 @@ async function viewEditor(id: string): Promise<void> {
   const errBox = h('div', { class: 'error-summary', role: 'alert', tabindex: '-1', hidden: true });
   const nav = h('nav', { class: 'side', 'aria-label': 'Seções da loja' });
   const main = h('div', { class: 'editor-main' });
-  const frame = h('iframe', { title: 'Prévia na loja', class: 'preview-iframe' });
-  const previewNote = h('p', { class: 'help preview-note', 'aria-live': 'polite' });
-  const previewPages: Record<string, string> = { home: view.store.basePath || '/', listing: `${view.store.basePath}/products`, product: `${view.store.basePath}/products` };
-  const pageSel = h('select', { 'aria-label': 'Página da prévia' }, h('option', { value: 'home' }, 'Início'), h('option', { value: 'listing' }, 'Listagem'), h('option', { value: 'product' }, 'Produto'));
-  // A prévia renderiza a loja num viewport de verdade (computador 1440×900, celular 390×844)
-  // e reduz a imagem para caber na coluna: a largura do editor nunca decide o layout da loja.
-  const VIEWPORTS = { desktop: { w: 1440, h: 900 }, mobile: { w: 390, h: 844 } } as const;
-  let device: keyof typeof VIEWPORTS = 'desktop';
-  const devBtns = (['desktop', 'mobile'] as const).map((d) => h('button', { type: 'button', 'aria-pressed': d === device ? 'true' : 'false', 'data-device': d }, d === 'desktop' ? 'Computador' : 'Celular'));
-  const zoomBtn = h('button', { type: 'button', class: 'btn btn-small btn-quiet preview-zoom', 'aria-pressed': 'false' }, 'Ampliar');
-  const stage = h('div', { class: 'preview-stage' }, frame);
-  const frameBox = h('div', { class: 'preview-frame', 'data-device': device }, stage);
-  const fit = () => {
-    const vp = VIEWPORTS[device];
-    const avail = frameBox.clientWidth - (device === 'mobile' ? 24 : 0);
-    const maxH = previewPane.classList.contains('zoomed') ? window.innerHeight - 140 : Infinity;
-    const scale = Math.min(1, avail / vp.w, maxH / vp.h);
-    frame.style.width = `${vp.w}px`;
-    frame.style.height = `${vp.h}px`;
-    frame.style.transform = `scale(${scale})`;
-    stage.style.width = `${Math.round(vp.w * scale)}px`;
-    stage.style.height = `${Math.round(vp.h * scale)}px`;
-    frameBox.dataset.scale = String(Math.round(scale * 100));
-  };
-  new ResizeObserver(() => fit()).observe(frameBox);
-  let previewReady = false;
-  let previewOrigin = '';
+  const preview = createPreview({ id, basePath: view.store.basePath, draft: () => draft, entitled });
+  const { pane: previewPane, pages: previewPages, push: pushPreview, fit, load: loadPreview } = preview;
 
   const header = h(
     'div',
     { class: 'editor-head' },
     h('div', {}, crumbs(...(user?.role === 'operator' ? [['Lojas', '#/lojas'] as [string, string]] : []), view.store.name), h('h1', {}, view.store.name), statusLive, statusDraft, statusShort),
-    h('div', { class: 'head-actions' }, user?.role === 'operator' ? h('a', { class: 'btn btn-quiet', href: `#/lojas/${id}/operacao` }, 'Operação') : null, h('a', { class: 'btn btn-quiet', href: view.storeUrl, target: '_blank', rel: 'noopener' }, 'Abrir loja ↗'), h('div', { class: 'head-primary' }, saveBtn, pubBtn)),
-  );
-  const previewPane = h(
-    'aside',
-    { class: 'preview' },
-    h('div', { class: 'preview-head' }, h('h2', {}, 'Prévia na loja'), pageSel, h('div', { class: 'seg', role: 'group', 'aria-label': 'Dispositivo' }, ...devBtns), zoomBtn),
-    previewNote,
-    frameBox,
+    h('div', { class: 'head-actions' }, user?.role === 'operator' ? h('a', { class: 'btn btn-quiet', href: `#/lojas/${id}/operacao` }, 'Operação') : null, h('a', { class: 'btn btn-quiet', href: `#/lojas/${id}/configurar` }, 'Configuração guiada'), h('a', { class: 'btn btn-quiet', href: view.storeUrl, target: '_blank', rel: 'noopener' }, 'Abrir loja ↗'), h('div', { class: 'head-primary' }, saveBtn, pubBtn)),
   );
   // Celular: alternância explícita entre editar e ver a prévia (o rascunho não salvo vai junto).
   const modeBtns = (['edit', 'preview'] as const).map((m) => h('button', { type: 'button', 'aria-pressed': m === 'edit' ? 'true' : 'false', 'data-mode': m }, m === 'edit' ? 'Editar' : 'Ver prévia'));
@@ -691,7 +1127,7 @@ async function viewEditor(id: string): Promise<void> {
       editorEl.dataset.mode = m;
       modeBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
       if (m === 'preview') {
-        if (window.matchMedia('(max-width: 860px)').matches && device !== 'mobile') devBtns.find((d) => d.dataset.device === 'mobile')?.click();
+        if (window.matchMedia('(max-width: 860px)').matches) preview.setDevice('mobile');
         pushPreview();
         requestAnimationFrame(fit);
       }
@@ -699,58 +1135,6 @@ async function viewEditor(id: string): Promise<void> {
     }),
   );
   app.replaceChildren(header, pubHint, errBox, modeBar, editorEl);
-
-  // ---- prévia
-  const loadPreview = async () => {
-    previewReady = false;
-    try {
-      const t = await api<{ token: string; storeUrl: string }>(`/api/stores/${id}/preview-token`, { method: 'POST', json: {} });
-      const base = new URL(t.storeUrl);
-      previewOrigin = base.origin;
-      const path = previewPages[pageSel.value] ?? base.pathname;
-      const u = new URL(path, base.origin);
-      u.searchParams.set('__pink_preview', t.token);
-      frame.src = u.href;
-    } catch (err) {
-      previewNote.textContent = `Prévia indisponível: ${errorText(err)}`;
-    }
-  };
-  window.onmessage = (e: MessageEvent) => {
-    if (e.origin !== previewOrigin || (e.data as { type?: string })?.type !== 'pink-preview-ready') return;
-    previewReady = true;
-    pushPreview();
-  };
-  pageSel.addEventListener('change', () => void loadPreview());
-  devBtns.forEach((b) =>
-    b.addEventListener('click', () => {
-      devBtns.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
-      device = b.dataset.device as keyof typeof VIEWPORTS;
-      frameBox.dataset.device = device;
-      fit();
-    }),
-  );
-  // Ampliar: a prévia ocupa a tela para inspeção (Esc ou o mesmo botão voltam).
-  const setZoom = (on: boolean) => {
-    previewPane.classList.toggle('zoomed', on);
-    zoomBtn.setAttribute('aria-pressed', String(on));
-    zoomBtn.textContent = on ? 'Fechar ampliação' : 'Ampliar';
-    document.body.classList.toggle('preview-zoomed', on);
-    fit();
-  };
-  zoomBtn.addEventListener('click', () => setZoom(!previewPane.classList.contains('zoomed')));
-  document.addEventListener('keydown', (e) => e.key === 'Escape' && previewPane.classList.contains('zoomed') && setZoom(false));
-  requestAnimationFrame(fit);
-
-  function pushPreview(): void {
-    if (!previewReady || !frame.contentWindow) return;
-    const parsed = parseStoreConfig(draft);
-    const cfg = toPublicConfig({ id, basePath: view.store.basePath }, 0, new Date().toISOString(), parsed.value, entitled());
-    frame.contentWindow.postMessage({ type: 'pink-preview-config', config: cfg }, previewOrigin);
-    const on = Object.keys(cfg.modules).length;
-    previewNote.textContent = on
-      ? `Prévia do rascunho atual (${on} módulo(s) ativo(s) no rascunho), sobre a página real da loja. Nada aqui está publicado.`
-      : 'Nenhum módulo ativo no rascunho: a loja aparece como está.';
-  }
 
   // ---- estado
   function renderStatus(): void {

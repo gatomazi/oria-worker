@@ -15,6 +15,7 @@ import { previewToken } from './tokens.ts';
 import { installArtifacts, installStatus, type InstallContext } from './install.ts';
 import type { IntegrationService } from './integration.ts';
 import { inviteMail, resetMail, type Mailer } from './mailer.ts';
+import type { SetupService } from './setup.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -31,6 +32,7 @@ export interface AdminDeps {
   storeUrl: (s: Store) => string;
   install: InstallContext;
   integration: IntegrationService;
+  setup: SetupService;
 }
 
 function cookies(req: IncomingMessage): Record<string, string> {
@@ -301,6 +303,35 @@ export function createAdminHandler(deps: AdminDeps): (req: IncomingMessage, res:
     }
     if (action.startsWith('/catalog/') && method === 'GET') return catalogRoute(res, store, action, url);
 
+    // Configuração guiada (operador e lojista da própria loja). Tudo vai para o rascunho.
+    if (action === '/setup' && method === 'GET') {
+      const view = stores.view(store.id);
+      return sendJson(res, 200, {
+        progress: deps.setup.progress(store.id),
+        features: deps.setup.features(store.id),
+        presets: deps.setup.presets(store.id),
+        offers: deps.setup.offers(store.id),
+        identitySuggestion: deps.setup.identitySuggestion(store.id, view.draft.config.identity),
+      });
+    }
+    if (action === '/setup' && method === 'PUT') {
+      const body = (await readJson(req)) as { step?: unknown };
+      return sendJson(res, 200, { progress: deps.setup.setStep(store.id, body.step) });
+    }
+    if (action === '/setup/imports' && method === 'POST') {
+      const out = deps.setup.applyImports(store.id, (await readJson(req)) as Record<string, unknown>, user.id);
+      stores.audit(user.id, store.id, 'setup.imports', out.report.map((r) => `${r.key}:${r.result}`).join(' '));
+      return sendJson(res, 200, { ...forRole(out.view), report: out.report, offers: deps.setup.offers(store.id) });
+    }
+    if (action === '/setup/features' && method === 'POST') {
+      const out = deps.setup.setFeatures(store.id, (await readJson(req)) as Record<string, unknown>, user.id);
+      return sendJson(res, 200, { ...forRole(out.view), skipped: out.skipped, features: deps.setup.features(store.id) });
+    }
+    if (action === '/setup/complete' && method === 'POST') {
+      stores.audit(user.id, store.id, 'setup.complete');
+      return sendJson(res, 200, { progress: deps.setup.complete(store.id) });
+    }
+
     // Integração: operador e lojista da própria loja. O token nunca volta ao painel.
     if (action === '/integration' && method === 'GET') return sendJson(res, 200, deps.integration.status(store.id));
     if (action === '/integration/sync' && method === 'POST') {
@@ -391,6 +422,7 @@ export function createAdminHandler(deps: AdminDeps): (req: IncomingMessage, res:
       entitled: view.entitled,
       published: view.published ? { version: view.published.version, publishedAt: view.published.publishedAt, enabled } : null,
       draftPending: !view.draftMatchesPublished,
+      setup: deps.setup.progress(s.id),
       storeUrl: deps.storeUrl(s),
     };
   }

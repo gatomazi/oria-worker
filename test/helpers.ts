@@ -9,6 +9,7 @@ import { StoreService } from '../src/platform/stores.ts';
 import { MediaStore } from '../src/platform/media.ts';
 import { LocalBlobStore } from '../src/platform/blobs.ts';
 import { OutboxMailer } from '../src/platform/mailer.ts';
+import { SetupService } from '../src/platform/setup.ts';
 import { CatalogReader } from '../src/platform/catalog.ts';
 import { AssistantService } from '../src/platform/assistant.ts';
 import { IntegrationService } from '../src/platform/integration.ts';
@@ -26,6 +27,7 @@ export interface Stack {
   assistant: AssistantService;
   integration: IntegrationService;
   mailer: OutboxMailer;
+  setup: SetupService;
   secret: Buffer;
   close(): void;
 }
@@ -51,6 +53,7 @@ export function stack(opts: { fetchImpl?: typeof fetch; apiFetch?: typeof fetch;
     assistant,
     integration,
     mailer: new OutboxMailer(null),
+    setup: new SetupService({ db, stores, integration }),
     secret,
     close() {
       db.close();

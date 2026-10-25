@@ -57,6 +57,7 @@ before(async () => {
     storeUrl: (x) => `http://${x.devHost}:8787${x.basePath}`,
     install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, probe: async () => ({ status: 200, body: '' }), remote: async () => ({ status: 200, body: '' }) },
     integration: s.integration,
+    setup: s.setup,
   });
   await listen(admin, port);
 });
@@ -138,6 +139,7 @@ test('painel em https: cookie Secure; host e origem só os do painel', async () 
     storeUrl: () => '',
     install: { workerPort: 8787, publicPort: 4001, stores: s.stores, auth: s.auth, remote: async () => ({ status: 200, body: '' }) },
     integration: s.integration,
+    setup: s.setup,
   });
   await listen(srv, port);
   // O proxy de TLS entrega o host original do pedido (fetch não deixa trocar o Host).
